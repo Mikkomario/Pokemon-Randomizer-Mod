@@ -32,6 +32,9 @@ import java.util.*;
 import com.dabomstew.pkrandom.pokemon.*;
 import com.dabomstew.pkrandom.romhandlers.Gen1RomHandler;
 import com.dabomstew.pkrandom.romhandlers.RomHandler;
+import vf.controller.RandomizeTypes;
+import vf.model.EvolveGroup;
+import vf.model.Types;
 
 // Can randomize a file based on settings. Output varies by seed.
 public class Randomizer {
@@ -160,9 +163,16 @@ public class Randomizer {
             romHandler.standardizeEXPCurves(settings);
         }
 
+        // Tracks original types for wild encounter randomization
+        Types originalTypes = Types.from(romHandler.getPokemonInclFormes());
+        // Also tracks evolve paths
+        scala.collection.immutable.Set<EvolveGroup> groups = EvolveGroup.all(romHandler);
+
         // Pokemon Types
         if (settings.getTypesMod() != Settings.TypesMod.UNCHANGED) {
-            romHandler.randomizePokemonTypes(settings);
+            // NB: Modified
+            RandomizeTypes.apply(groups, originalTypes);
+            // romHandler.randomizePokemonTypes(settings);
             pokemonTraitsChanged = true;
         }
 
@@ -188,6 +198,7 @@ public class Randomizer {
         }
 
         // Base stat randomization
+        // TODO: Create custom implementation
         switch (settings.getBaseStatisticsMod()) {
             case SHUFFLE:
                 romHandler.shufflePokemonStats(settings);
@@ -222,6 +233,7 @@ public class Randomizer {
         }
 
         // Trade evolutions removal
+        // TODO: Review and customize
         if (settings.isChangeImpossibleEvolutions()) {
             romHandler.removeImpossibleEvolutions(settings);
         }
@@ -268,6 +280,7 @@ public class Randomizer {
                 startersChanged = true;
                 break;
             case RANDOM_WITH_TWO_EVOLUTIONS:
+                // TODO: Add stat-based filtering / matching as well
                 romHandler.randomizeBasicTwoEvosStarters(settings);
                 startersChanged = true;
                 break;
@@ -294,6 +307,7 @@ public class Randomizer {
         // 1. Randomize movesets
         // 2. Reorder moves by damage
         // Note: "Metronome only" is handled after trainers instead
+        // TODO: Customize
 
         if (settings.getMovesetsMod() != Settings.MovesetsMod.UNCHANGED &&
                 settings.getMovesetsMod() != Settings.MovesetsMod.METRONOME_ONLY) {
@@ -338,6 +352,7 @@ public class Randomizer {
         // 3. Follow evolutions
         // 4. Full HM compatibility
         // 5. Copy to cosmetic forms
+        // TODO: Customize
 
         switch (settings.getTmsHmsCompatibilityMod()) {
             case COMPLETELY_RANDOM:
@@ -430,8 +445,11 @@ public class Randomizer {
 
         // Trainer Pokemon
         // 1. Add extra Trainer Pokemon
+        // TODO: Review
         // 2. Set trainers to be double battles and add extra Pokemon if necessary
+        // TODO: Review
         // 3. Randomize Trainer Pokemon
+        // TODO: Customize
         // 4. Modify rivals to carry starters
         // 5. Force Trainer Pokemon to be fully evolved
 
@@ -527,6 +545,7 @@ public class Randomizer {
         }
 
         // Static Pokemon
+        // TODO: Review and possibly change
         if (romHandler.canChangeStaticPokemon()) {
             List<StaticEncounter> oldStatics = romHandler.getStaticPokemon();
             if (settings.getStaticPokemonMod() != Settings.StaticPokemonMod.UNCHANGED) { // Legendary for L
@@ -572,6 +591,7 @@ public class Randomizer {
             romHandler.changeCatchRates(settings);
         }
 
+        // TODO: Custom implementation
         switch (settings.getWildPokemonMod()) {
             case RANDOM:
                 romHandler.randomEncounters(settings);
@@ -627,6 +647,7 @@ public class Randomizer {
         }
 
         // Field Items
+        // TODO: Customize
         switch(settings.getFieldItemsMod()) {
             case SHUFFLE:
                 romHandler.shuffleFieldItems();
@@ -640,7 +661,7 @@ public class Randomizer {
         }
 
         // Shops
-
+        // TODO: Customize
         switch(settings.getShopItemsMod()) {
             case SHUFFLE:
                 romHandler.shuffleShopItems();
