@@ -5,9 +5,11 @@ import utopia.flow.collection.immutable.Pair
 
 object TypeSet
 {
-	def from(pokemon: Pokemon) = apply(pokemon.primaryType, Option(pokemon.secondaryType))
+	def from(pokemon: Pokemon) =
+		apply(pokemon.primaryType, Option(pokemon.secondaryType).filterNot { _ == pokemon.primaryType })
 	
-	def apply(primary: Type, secondary: Type): TypeSet = new TypeSet(primary, Some(secondary))
+	def apply(primary: Type, secondary: Type): TypeSet =
+		new TypeSet(primary, Some(secondary).filterNot { _ == primary })
 }
 
 /**

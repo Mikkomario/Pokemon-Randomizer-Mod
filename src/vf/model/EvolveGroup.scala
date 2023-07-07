@@ -43,7 +43,7 @@ object EvolveGroup
 	}
 	
 	def singleForm(poke: Pokemon) =
-		apply(Vector(poke), mega = poke.megaEvolutionsTo.iterator().asScala.nextOption().map { _.to })
+		apply(Vector(poke), megas = Set.from(poke.megaEvolutionsTo.iterator().asScala.map { _.to }))
 }
 
 /**
@@ -54,18 +54,17 @@ object EvolveGroup
  *              For secondary forms of splitting evolves (e.g. Nincada -> Shedinja), contains the forms after the split
  * @param baseForm The form that comes before this chain.
  *                 Applicable for secondary splitting evolves, only.
- * @param mega Mega for of the final evolved form, if applicable
+ * @param megas Mega evolution(s) for of the final evolved form, if applicable
  */
-case class EvolveGroup(forms: Vector[Pokemon], baseForm: Option[Pokemon] = None, mega: Option[Pokemon] = None)
+case class EvolveGroup(forms: Vector[Pokemon], baseForm: Option[Pokemon] = None, megas: Set[Pokemon] = Set.empty)
 {
 	// COMPUTED -------------------------
 	
 	def finalForm = forms.last
-	def finalOrMegaForm = mega.getOrElse(finalForm)
 	
-	def iterator = forms.iterator ++ mega.iterator
+	def iterator = forms.iterator ++ megas.iterator
 	def finalToBaseIterator = forms.reverseIterator
-	def megaToBaseIterator = mega.iterator ++ finalToBaseIterator
+	def megaToBaseIterator = megas.iterator ++ finalToBaseIterator
 	
 	def canAddSecondaryType(implicit types: Types) = finalToBaseIterator.forall { types(_).secondary.isEmpty }
 	def hasSecondaryTypes(implicit types: Types) = megaToBaseIterator.exists { types(_).secondary.nonEmpty }

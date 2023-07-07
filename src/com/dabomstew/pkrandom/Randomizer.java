@@ -25,16 +25,14 @@ package com.dabomstew.pkrandom;
 /*--  along with this program. If not, see <http://www.gnu.org/licenses/>.  --*/
 /*----------------------------------------------------------------------------*/
 
-import java.io.OutputStream;
-import java.io.PrintStream;
-import java.util.*;
-
 import com.dabomstew.pkrandom.pokemon.*;
 import com.dabomstew.pkrandom.romhandlers.Gen1RomHandler;
 import com.dabomstew.pkrandom.romhandlers.RomHandler;
-import vf.controller.RandomizeTypes;
-import vf.model.EvolveGroup;
-import vf.model.Types;
+import vf.controller.JavaRandomizationContext;
+
+import java.io.OutputStream;
+import java.io.PrintStream;
+import java.util.*;
 
 // Can randomize a file based on settings. Output varies by seed.
 public class Randomizer {
@@ -163,15 +161,12 @@ public class Randomizer {
             romHandler.standardizeEXPCurves(settings);
         }
 
-        // Tracks original types for wild encounter randomization
-        Types originalTypes = Types.from(romHandler.getPokemonInclFormes());
-        // Also tracks evolve paths
-        scala.collection.immutable.Set<EvolveGroup> groups = EvolveGroup.all(romHandler);
+        JavaRandomizationContext context = new JavaRandomizationContext(romHandler);
 
         // Pokemon Types
         if (settings.getTypesMod() != Settings.TypesMod.UNCHANGED) {
             // NB: Modified
-            RandomizeTypes.apply(groups, originalTypes);
+            context.randomizeTypes();
             // romHandler.randomizePokemonTypes(settings);
             pokemonTraitsChanged = true;
         }
@@ -198,14 +193,12 @@ public class Randomizer {
         }
 
         // Base stat randomization
-        // TODO: Create custom implementation
+        // NB: Modified
         switch (settings.getBaseStatisticsMod()) {
             case SHUFFLE:
-                romHandler.shufflePokemonStats(settings);
-                pokemonTraitsChanged = true;
-                break;
             case RANDOM:
-                romHandler.randomizePokemonStats(settings);
+                context.randomizeStats();
+                // romHandler.shufflePokemonStats(settings);
                 pokemonTraitsChanged = true;
                 break;
             default:

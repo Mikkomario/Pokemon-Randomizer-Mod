@@ -1,6 +1,7 @@
 package vf.model
 
 import com.dabomstew.pkrandom.pokemon.Type
+import com.dabomstew.pkrandom.romhandlers.RomHandler
 import utopia.flow.collection.CollectionExtensions._
 import utopia.flow.collection.immutable.Graph
 import utopia.flow.util.NotEmpty
@@ -66,8 +67,12 @@ object TypeRelations
 	
 	// OTHER    -----------------------
 	
-	def of(t: Type) =
-		apply(t, relations.node(t).leavingEdges.map { e => e.value -> e.end.value }.toVector.asMultiMap)
+	def of(t: Type)(implicit rom: RomHandler) =
+		apply(t, relations.node(t).leavingEdges.iterator
+			// Removes all types that don't appear in the targeted game
+			.filter { e => rom.typeInGame(e.end.value) }
+			.map { e => e.value -> e.end.value }
+			.toVector.asMultiMap)
 }
 
 /**
