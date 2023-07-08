@@ -27,6 +27,7 @@ object RandomizeStats
 	def all()(implicit groups: IterableOnce[EvolveGroup]): Unit = groups.iterator.foreach(apply)
 	
 	// Uniformly randomizes for the whole evolve-group
+	// TODO: Handle Shedinja separately
 	def apply(group: EvolveGroup) = {
 		val modifiers = Iterator
 			.continually {

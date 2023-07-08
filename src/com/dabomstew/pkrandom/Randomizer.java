@@ -226,7 +226,6 @@ public class Randomizer {
         }
 
         // Trade evolutions removal
-        // TODO: Review and customize
         if (settings.isChangeImpossibleEvolutions()) {
             romHandler.removeImpossibleEvolutions(settings);
         }
@@ -235,6 +234,8 @@ public class Randomizer {
         if (settings.isMakeEvolutionsEasier()) {
             romHandler.condenseLevelEvolutions(40, 30);
             romHandler.makeEvolutionsEasier(settings);
+            // NB: Added
+            context.makeEvolvesEasier();
         }
 
         // Remove time-based evolutions

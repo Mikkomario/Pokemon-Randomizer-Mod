@@ -22,5 +22,15 @@ object PokemonExtensions
 			stats.mergeWith(values.reverse)(update)
 		}
 		def mapStat(stat: PokeStat)(f: Int => Int) = update(stat, f(apply(stat)))
+		
+		// Makes the specified item appear as a held item (as commonly as possible)
+		def giveItem(item: Int) = {
+			if (p.guaranteedHeldItem >= 0)
+				p.guaranteedHeldItem = item
+			else if (p.commonHeldItem >= 0)
+				p.commonHeldItem = item
+			else if (p.rareHeldItem >= 0)
+				p.rareHeldItem = item
+		}
 	}
 }

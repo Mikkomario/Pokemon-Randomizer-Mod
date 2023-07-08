@@ -32,7 +32,7 @@ object RandomizeTypes
 	
 	// OTHER    --------------------------
 	
-	def apply(groups: IterableOnce[EvolveGroup])(implicit types: Types, rom: RomHandler): (Map[Int, (Type, Type)], Map[Int, Type]) = {
+	def all()(implicit groups: IterableOnce[EvolveGroup], types: Types, rom: RomHandler): (Map[Int, (Type, Type)], Map[Int, Type]) = {
 		val (conversions, additions) = groups.iterator.splitFlatMap(apply)
 		conversions.toMap -> additions.toMap
 	}

@@ -11,7 +11,17 @@ sealed trait TypeRelation extends SelfComparable[TypeRelation]
 {
 	// ABSTRACT -------------------------
 	
+	// Also matches index in list
 	protected def strength: Int
+	
+	
+	// COMPUTED ------------------------
+	
+	def nextStronger = TypeRelation(strength + 1)
+	def nextWeaker = TypeRelation(strength - 1)
+	
+	def stronger = TypeRelation.values.drop(strength + 1)
+	def weaker = TypeRelation.values.take(strength)
 	
 	
 	// IMPLEMENTED  ---------------------
@@ -23,7 +33,25 @@ sealed trait TypeRelation extends SelfComparable[TypeRelation]
 
 object TypeRelation
 {
+	// ATTRIBUTES   -------------------
+	
 	val values = Vector[TypeRelation](Unrelated, WeakRelative, Relative, StrongRelative)
+	val min: TypeRelation = WeakRelative
+	val max: TypeRelation = StrongRelative
+	
+	
+	// OTHER    ----------------------
+	
+	private def apply(strength: Int) = values.lift(strength)
+		.getOrElse {
+			if (strength < min.strength)
+				min
+			else
+				max
+		}
+	
+	
+	// VALUES   ----------------------
 	
 	case object StrongRelative extends TypeRelation
 	{

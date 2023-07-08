@@ -1,5 +1,6 @@
 package vf.model
 
+import com.dabomstew.pkrandom.RandomSource
 import com.dabomstew.pkrandom.pokemon.{Pokemon, Type}
 import utopia.flow.collection.immutable.Pair
 
@@ -25,6 +26,8 @@ case class TypeSet(primary: Type, secondary: Option[Type] = None)
 		case Some(s) => Pair(primary, s)
 		case None => Vector(primary)
 	}
+	
+	def random = secondary.filter { _ => RandomSource.nextBoolean() }.getOrElse(primary)
 	
 	
 	// OTHER    ---------------------

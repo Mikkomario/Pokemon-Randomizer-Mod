@@ -32,7 +32,8 @@ object EvolveGroup
 								.flatMap { e => allStartingFrom(e.to).map { _.copy(baseForm = Some(baseForm)) } }
 					// Case: Only splitting evolutions => Converts one of them into a linear evolution
 					case None =>
-						val linearIndex = RandomSource.nextInt(splitting.size)
+						val linearIndex = splitting.indexWhereOption { _.`type`.usesLevel() }
+							.getOrElse { RandomSource.nextInt(splitting.size) }
 						allStartingFrom(splitting(linearIndex).to).map { baseForm +: _ } ++
 							splitting.withoutIndex(linearIndex)
 								.flatMap { e => allStartingFrom(e.to).map { _.copy(baseForm = Some(baseForm)) } }

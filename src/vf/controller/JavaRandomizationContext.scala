@@ -23,10 +23,10 @@ class JavaRandomizationContext(implicit romHandler: RomHandler)
 	// OTHER    ------------------------
 	
 	def randomizeTypes() = {
-		val (conversions, additions) = RandomizeTypes(evolveGroups)
+		val (conversions, additions) = RandomizeTypes.all()
 		typeConversions = conversions
 		typeAdditions = additions
 	}
-	
 	def randomizeStats() = RandomizeStats.all()
+	def makeEvolvesEasier() = MakeEvolvesEasier.all()
 }
