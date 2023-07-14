@@ -1,9 +1,11 @@
 package vf.controller
 
 import com.dabomstew.pkrandom.RandomSource
+import com.dabomstew.pkrandom.constants.Species
 import vf.model.{EvolveGroup, PokeStat}
 import utopia.flow.collection.CollectionExtensions._
 import utopia.flow.collection.immutable.Pair
+import vf.model.PokeStat.Hp
 import vf.util.PokemonExtensions._
 
 /**
@@ -24,11 +26,15 @@ object RandomizeStats
 	
 	// OTHER    ------------------------------
 	
-	def all()(implicit groups: IterableOnce[EvolveGroup]): Unit = groups.iterator.foreach(apply)
+	// Returns modifications made
+	def all()(implicit groups: IterableOnce[EvolveGroup]) = {
+		val (modifiers, swaps) = groups.iterator.splitFlatMap(apply)
+		modifiers.toMap -> swaps.toMap
+	}
 	
 	// Uniformly randomizes for the whole evolve-group
-	// TODO: Handle Shedinja separately
 	def apply(group: EvolveGroup) = {
+		// Movies n stats by n%
 		val modifiers = Iterator
 			.continually {
 				val modifierIter = {
@@ -53,20 +59,52 @@ object RandomizeStats
 			// If a stat was randomized multiple times, combines the effects
 			.groupMapReduce { _._1 } { _._2 } { _ * _ }
 			.withDefaultValue(1.0)
-		val shuffles = Iterator
-			.continually {
-				val from = PokeStat.random
-				val to = from.otherRandom
-				Pair(from, to)
-			}
-			.takeWhile { _ => RandomSource.nextDouble() < shuffleStatChainChance }
-			.toVector
+		// Swaps stats around randomly (chaining)
+		val statAssignments = {
+			val defaultSwaps = Iterator
+				.continually {
+					val from = PokeStat.random
+					val to = from.otherRandom
+					Pair(from, to)
+				}
+				.takeWhile { _ => RandomSource.nextDouble() < shuffleStatChainChance }
+				// Forms a map of the assignments
+				.foldLeft(PokeStat.values.map { s => s -> s }.toMap) { (stats, swap) =>
+					val actualSwaps = Pair(swap, swap.reverse).map { swap => swap.first -> stats(swap.second) }.toMap
+					stats ++ actualSwaps
+				}
+				// Removes cases where the stat won't change
+				.filterNot { case (to, from) => to == from }
+			
+			// However, if the targeted poke is Shedinja (1 HP), won't allow swaps that include HP
+			// (Affects the whole group)
+			if (group.iterator.exists { _.number == Species.shedinja })
+				defaultSwaps.filterNot { case (to, from) => Pair(to, from).contains(Hp) }
+			else
+				defaultSwaps
+		}
+		
 		// Applies the shuffles and the modifiers to all pokemon in this group
 		group.iterator.foreach { poke =>
-			shuffles.foreach(poke.swap)
+			statAssignments.foreach { swap => poke.swap(Pair.tupleToPair(swap)) }
 			modifiers.foreachEntry { (stat, mod) =>
 				poke.mapStat(stat) { v => ((v * mod).toInt max stat.minimumValue) min PokeStat.maxValue }
 			}
 		}
+		
+		// Returns the applied modifications
+		val modifiersToReturn = {
+			if (modifiers.isEmpty)
+				Map[Int, Map[PokeStat, Double]]()
+			else
+				group.iterator.map { _.number -> modifiers }.toMap
+		}
+		val assignmentsToReturn = {
+			if (statAssignments.isEmpty)
+				Map[Int, Map[PokeStat, PokeStat]]()
+			else
+				group.iterator.map { _.number -> statAssignments }.toMap
+		}
+		modifiersToReturn -> assignmentsToReturn
 	}
 }

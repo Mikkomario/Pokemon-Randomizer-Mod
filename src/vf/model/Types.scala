@@ -69,6 +69,9 @@ object Types
 	
 	// OTHER    -----------------------
 	
+	def all(implicit pokemons: Pokemons) =
+		apply(pokemons.iterator.map { p => p.number -> TypeSet.from(p) }.toMap)
+	
 	def from(pokemon: util.List[Pokemon]) = {
 		apply(pokemon.iterator().asScala.flatMap { Option(_) }.map { p => p.number -> TypeSet.from(p) }.toMap)
 	}

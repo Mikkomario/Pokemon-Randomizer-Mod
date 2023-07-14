@@ -10,6 +10,29 @@ import utopia.flow.collection.CollectionExtensions._
  */
 object RandomUtils
 {
+	def chance(trueRatio: Double) = RandomSource.nextDouble() < trueRatio
+	def chanceNotTo(falseRatio: Double) = chance(1 - falseRatio)
+	
+	def decreasedChance(trueRatio: Double, diff: Double = 0.5) = chance(trueRatio * (1 - diff))
+	def increasedChance(trueRatio: Double, diff: Double = 0.5) =
+		chanceNotTo((1 - trueRatio) * (1 - diff))
+	
+	// Generates n integers which are all different
+	def distinctNextInts(count: Int, bound: Int): Set[Int] = {
+		// Case: Nothing to generate
+		if (count <= 0)
+			Set()
+		// Case: No randomization applicable
+		else if (count >= bound - 1)
+			(0 until bound).toSet
+		// Case: Only one random number required
+		else if (count == 1)
+			Set(RandomSource.nextInt(bound))
+		// Case: May be randomized
+		else
+			Iterator.continually { RandomSource.nextInt(bound) }.distinct.take(count).toSet
+	}
+	
 	def weighedRandom[A](options: Iterable[(A, Double)]) = {
 		val totalWeight = options.iterator.map { _._2 }.sum
 		// Relativizes the items so that total weight is 1

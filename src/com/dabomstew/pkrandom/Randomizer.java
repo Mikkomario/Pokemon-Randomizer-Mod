@@ -161,7 +161,7 @@ public class Randomizer {
             romHandler.standardizeEXPCurves(settings);
         }
 
-        JavaRandomizationContext context = new JavaRandomizationContext(romHandler);
+        JavaRandomizationContext context = new JavaRandomizationContext(romHandler, settings);
 
         // Pokemon Types
         if (settings.getTypesMod() != Settings.TypesMod.UNCHANGED) {
@@ -301,11 +301,11 @@ public class Randomizer {
         // 1. Randomize movesets
         // 2. Reorder moves by damage
         // Note: "Metronome only" is handled after trainers instead
-        // TODO: Customize
-
         if (settings.getMovesetsMod() != Settings.MovesetsMod.UNCHANGED &&
                 settings.getMovesetsMod() != Settings.MovesetsMod.METRONOME_ONLY) {
-            romHandler.randomizeMovesLearnt(settings);
+            // NB: Customized
+            context.randomizeMoves();
+            // romHandler.randomizeMovesLearnt(settings);
             romHandler.randomizeEggMoves(settings);
             movesetsChanged = true;
         }
@@ -346,7 +346,6 @@ public class Randomizer {
         // 3. Follow evolutions
         // 4. Full HM compatibility
         // 5. Copy to cosmetic forms
-        // TODO: Customize
 
         switch (settings.getTmsHmsCompatibilityMod()) {
             case COMPLETELY_RANDOM:

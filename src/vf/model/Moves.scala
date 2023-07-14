@@ -27,6 +27,8 @@ case class Moves(all: Set[Move], banned: Set[Int])
 {
 	lazy val valid = all.filterNot { m => banned.contains(m.number) }
 	
+	lazy val byNumber = valid.iterator.map { m => m.number -> m }.toMap
+	
 	lazy val byType = valid.groupBy { _.`type` }.withDefaultValue(Set())
 	lazy val byHasStatChange = valid.groupBy { _.hasBeneficialStatChange }.withDefaultValue(Set())
 	lazy val byDamages = valid.groupBy { _.power > 0 }.withDefaultValue(Set())

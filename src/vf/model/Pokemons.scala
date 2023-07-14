@@ -15,7 +15,26 @@ object Pokemons
  * @author Mikko Hilpinen
  * @since 3.7.2023, v1.0-alt
  */
-case class Pokemons(values: Map[Int, Pokemon])
+case class Pokemons(values: Map[Int, Pokemon]) extends Iterable[Pokemon]
 {
-	val originalTypes = Types(values.view.mapValues(TypeSet.from).toMap)
+	// ATTRIBUTES   ----------------------------
+	
+	/**
+	 * Pokemons that appear only as cosmetic forms
+	 */
+	lazy val cosmeticForms = iterator.filter { _.actuallyCosmetic }.toVector
+	
+	
+	// OTHER    --------------------------------
+	
+	/**
+	 * @param pokeNum Number of the targeted poke
+	 * @return Pokemon matching that number. None if not found.
+	 */
+	def apply(pokeNum: Int) = values.get(pokeNum)
+	
+	
+	// IMPLEMENTED  ---------------------------
+	
+	override def iterator: Iterator[Pokemon] = values.valuesIterator
 }

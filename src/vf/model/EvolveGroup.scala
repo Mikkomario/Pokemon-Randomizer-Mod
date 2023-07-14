@@ -12,7 +12,10 @@ object EvolveGroup
 	// COMPUTED --------------------------
 	
 	def all(implicit rom: RomHandler) =
-		RomFunctions.getBasicPokemon(rom).iterator().asScala.flatMap(allStartingFrom).toSet
+		RomFunctions.getBasicPokemon(rom).iterator().asScala
+			// Won't group cosmetic forms
+			.filterNot { _.actuallyCosmetic }
+			.flatMap(allStartingFrom).toSet
 	
 	
 	// OTHER    --------------------------
