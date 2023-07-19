@@ -78,13 +78,14 @@ object RandomizeStats
 			
 			// However, if the targeted poke is Shedinja (1 HP), won't allow swaps that include HP
 			// (Affects the whole group)
-			if (group.iterator.exists { _.number == Species.shedinja })
+			if (group.forms.exists { _.number == Species.shedinja })
 				defaultSwaps.filterNot { case (to, from) => Pair(to, from).contains(Hp) }
 			else
 				defaultSwaps
 		}
 		
 		// Applies the shuffles and the modifiers to all pokemon in this group
+		// Saves the original BST (base-stat-total) values
 		group.iterator.foreach { poke =>
 			statAssignments.foreach { swap => poke.swap(Pair.tupleToPair(swap)) }
 			modifiers.foreachEntry { (stat, mod) =>

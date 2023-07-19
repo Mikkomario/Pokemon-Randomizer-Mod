@@ -3,9 +3,10 @@ package vf.model
 import com.dabomstew.pkrandom.pokemon.Type
 import com.dabomstew.pkrandom.romhandlers.RomHandler
 import utopia.flow.collection.CollectionExtensions._
+import utopia.flow.collection.immutable.caching.cache.Cache
 import utopia.flow.collection.immutable.{Graph, Pair}
 import utopia.flow.util.NotEmpty
-import vf.model.TypeRelation.{Relative, StrongRelative, WeakRelative}
+import vf.model.TypeRelation.{Relative, StrongRelative, Unrelated, WeakRelative}
 import vf.util.RandomUtils._
 
 object TypeRelations
@@ -64,41 +65,55 @@ object TypeRelations
 		(Type.ROCK, StrongRelative, Type.STEEL)
 	), isTwoWayBound = true)
 	
-	
+	// Caches calculated relations for optimization
+	// Rom => Type => Relatives
+	private val typeRelativesCache = Cache { implicit rom: RomHandler => Cache(relationsOf) }
+	// Rom => TypeSet => TypeRelations
+	private val typeSetRelativesCache = Cache { implicit rom: RomHandler => Cache(_of) }
 	
 	
 	// OTHER    -----------------------
 	
-	// TODO: Consider adding caching (RomHander makes it difficult, though)
-	def of(types: TypeSet)(implicit rom: RomHandler) = {
-		val primaryRelations = relationsOf(types.primary)
+	def of(types: TypeSet)(implicit rom: RomHandler) = typeSetRelativesCache(rom)(types)
+	def of(t: Type)(implicit rom: RomHandler) = apply(TypeSet(t), typeRelativesCache(rom)(t))
+	
+	private def _of(types: TypeSet)(implicit rom: RomHandler) = {
+		val typeRelatives = typeRelativesCache(rom)
+		val primaryRelations = typeRelatives(types.primary)
 		types.secondary match {
 			// Case: Has two types => Finds the combined relations
 			case Some(secondary) =>
-				val secondaryRelations = relationsOf(secondary)
+				val secondaryRelations = typeRelatives(secondary)
 				val bothRelations = Pair(primaryRelations, secondaryRelations)
 				// Merges the two sets of relations
 				val mergedRelations = TypeRelation.values.flatMap { level =>
-					lazy val strongerLevels = level.stronger
-					lazy val nextLevel = level.nextStronger
-					lazy val muchStrongerLevels = nextLevel.stronger
+					lazy val strongerLevels = level.moreIterator.toVector
+					lazy val nextLevel = level.more
+					lazy val muchStrongerLevels = nextLevel.moreIterator.toVector
 					val (separate, common) = bothRelations.map { _(level) }.separateMatching
 					
+					// Relations that appear in both types are made stronger (unless unrelated)
+					val mergedCommon = {
+						if (level == Unrelated)
+							Vector()
+						else
+							common.map { _.first }
+								.filterNot { t =>
+									muchStrongerLevels.exists { strongerLevel =>
+										bothRelations.exists { _(strongerLevel).contains(t) }
+									}
+								}.map { nextLevel -> _ }
+					}
 					// Relations appearing in only one type are added,
 					// unless they appear in a stronger relation in the other type
 					separate.merge { _ ++ _ }
 						.filterNot { t => t == types.primary || t == secondary }
-						.filterNot { t => strongerLevels.exists { strongerLevel =>
-							bothRelations.exists { _(strongerLevel).contains(t) }
-						}}
-						.map { level -> _ } ++
-						// Relations that appear in both types are made stronger
-						common.map { _.first }
-							.filterNot { t =>
-								muchStrongerLevels.exists { strongerLevel =>
-									bothRelations.exists { _(strongerLevel).contains(t) }
-								}
-							}.map { nextLevel -> _ }
+						.filterNot { t =>
+							strongerLevels.exists { strongerLevel =>
+								bothRelations.exists { _(strongerLevel).contains(t) }
+							}
+						}
+						.map { level -> _ } ++ mergedCommon
 				}.asMultiMap
 				apply(types, mergedRelations)
 			// Case: Has a single type => Finds the relations of that type
@@ -106,16 +121,21 @@ object TypeRelations
 		}
 	}
 	
-	def of(t: Type)(implicit rom: RomHandler) =
-		apply(TypeSet(t), relationsOf(t))
-	
-	private def relationsOf(t: Type)(implicit rom: RomHandler) =
-		relations.node(t).leavingEdges.iterator
+	private def relationsOf(t: Type)(implicit rom: RomHandler) = {
+		val related = relations.node(t).leavingEdges.iterator
+			// Removes all types that don't appear in the targeted game
+			.filter { e => rom.typeInGame(e.end.value) }
+			.map { e => e.value -> e.end.value }
+			.toVector
+		val unrelated = Type.values().iterator
+			.filter { t => rom.typeInGame(t) && !related.exists { _._2 == t } }.toVector
+		val relatedMap = relations.node(t).leavingEdges.iterator
 			// Removes all types that don't appear in the targeted game
 			.filter { e => rom.typeInGame(e.end.value) }
 			.map { e => e.value -> e.end.value }
 			.toVector.asMultiMap
-			.withDefaultValue(Vector())
+		(relatedMap + (Unrelated -> unrelated)).withDefaultValue(Vector())
+	}
 }
 
 /**
@@ -125,6 +145,12 @@ object TypeRelations
  */
 case class TypeRelations(origin: TypeSet, relatives: Map[TypeRelation, Iterable[Type]])
 {
+	// ATTRIBUTES   ------------------
+	
+	lazy val relationStrengths = (relatives.flatMap { case (strength, types) => types.map { t => t -> strength } } ++
+		origin.types.map { _ -> StrongRelative }).withDefaultValue(Unrelated)
+	
+	
 	// COMPUTED ----------------------
 	
 	def random(weights: Map[TypeRelation, Double]) = {
@@ -145,6 +171,9 @@ case class TypeRelations(origin: TypeSet, relatives: Map[TypeRelation, Iterable[
 	
 	
 	// OTHER    ---------------------
+	
+	// Finds the type relation strength with another type-set
+	def apply(types: TypeSet) = types.types.iterator.map(relationStrengths.apply).reduce { _ avg _ }
 	
 	def -(t: Type) =
 		copy(relatives = relatives.view.mapValues { _.filterNot { _ == t } }.filterNot { _._2.isEmpty }.toMap)

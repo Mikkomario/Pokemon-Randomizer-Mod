@@ -24,11 +24,11 @@ object RandomizeTypes
 	private val addSecondaryChance = 0.65
 	private val addSecondaryChainingChance = 0.75
 	
-	private val changePrimaryChances = Map[TypeRelation, Double](
+	private val changePrimaryWeights = Map[TypeRelation, Double](
 		StrongRelative -> 0.55, Relative -> 0.3, WeakRelative -> 0.15)
-	private val changeSecondaryChances = Map[TypeRelation, Double](
+	private val changeSecondaryWeights = Map[TypeRelation, Double](
 		StrongRelative -> 0.5, Relative -> 0.25, WeakRelative -> 0.15, Unrelated -> 0.1)
-	private val addSecondaryChances = Map[TypeRelation, Double](
+	private val addSecondaryWeights = Map[TypeRelation, Double](
 		StrongRelative -> 0.35, Relative -> 0.3, WeakRelative -> 0.25, Unrelated -> 0.1)
 	
 	
@@ -54,14 +54,14 @@ object RandomizeTypes
 		// Case: Adds a secondary type
 		if (group.canAddSecondaryType && RandomSource.nextDouble() < addSecondaryChance) {
 			val baseType = types(group.finalForm).primary
-			val newType = TypeRelations.of(baseType).random(addSecondaryChances)
+			val newType = TypeRelations.of(baseType).random(addSecondaryWeights)
 			
 			// May also alter the primary type(s) (lowered chance)
 			val primaryTypeChanges: Map[Int, Map[Type, Type]] = {
 				if (RandomSource.nextDouble() < changePrimaryChance * 0.5) {
 					val conversions = group.primaryTypes.map { original =>
 						// Won't allow conversion to the new secondary type
-						val target = (TypeRelations.of(original) - newType).random(changePrimaryChances)
+						val target = (TypeRelations.of(original) - newType).random(changePrimaryWeights)
 						original -> target
 					}.toMap
 					// Applies type conversions
@@ -107,7 +107,7 @@ object RandomizeTypes
 					// Case: Mega form has two types => May swap the other type
 					case Some(original) =>
 						if (RandomSource.nextDouble() < changeSecondaryChance) {
-							val newType = TypeRelations.of(original).random(changeSecondaryChances)
+							val newType = TypeRelations.of(original).random(changeSecondaryWeights)
 							mega.secondaryType = newType
 							Some(Left(mega.number -> Map(original -> newType)))
 						}
@@ -126,7 +126,7 @@ object RandomizeTypes
 		else if (group.hasSecondaryTypes && RandomSource.nextDouble() < changeSecondaryChance) {
 			val primaryTypes = group.primaryTypes
 			val conversions = group.secondaryTypes
-				.map { t => t -> (TypeRelations.of(t) -- primaryTypes).random(changeSecondaryChances) }
+				.map { t => t -> (TypeRelations.of(t) -- primaryTypes).random(changeSecondaryWeights) }
 				.toMap
 			val secondaryTypeSwaps = group.iterator.flatMap { poke =>
 				val original = poke.types
@@ -143,7 +143,7 @@ object RandomizeTypes
 				if (RandomSource.nextDouble() < changePrimaryChance * 0.5) {
 					val newSecondaryTypes = conversions.valuesIterator.toSet
 					val primaryConversions = primaryTypes
-						.map { t => t -> (TypeRelations.of(t) -- newSecondaryTypes).random(changePrimaryChances) }
+						.map { t => t -> (TypeRelations.of(t) -- newSecondaryTypes).random(changePrimaryWeights) }
 						.toMap
 					applyPrimaryConversions(group, primaryConversions).mergeWith(secondaryTypeSwaps) { _ ++ _ }
 				}
@@ -156,7 +156,7 @@ object RandomizeTypes
 		else if (RandomSource.nextDouble() < changePrimaryChance) {
 			val secondaryTypes = group.secondaryTypes
 			val conversions = group.primaryTypes
-				.map { t => t -> (TypeRelations.of(t) -- secondaryTypes).random(changePrimaryChances) }
+				.map { t => t -> (TypeRelations.of(t) -- secondaryTypes).random(changePrimaryWeights) }
 				.toMap
 			applyPrimaryConversions(group, conversions) -> Map()
 		}

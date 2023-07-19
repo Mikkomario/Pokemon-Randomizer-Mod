@@ -48,7 +48,7 @@ object RandomizeMoves
 	// OTHER    -------------------------
 	
 	// Randomizes moves for all pokemon
-	def all(typeConversions: Map[Int, Map[Type, Type]], addedTypes: Map[Int, Type],
+	def all(currentTypes: Types, typeConversions: Map[Int, Map[Type, Type]], addedTypes: Map[Int, Type],
 	        statModifiers: Map[Int, Map[PokeStat, Double]], statSwaps: Map[Int, Map[PokeStat, PokeStat]])
 	       (implicit rom: RomHandler, pokemons: Pokemons, moves: Moves, settings: Settings) =
 	{
@@ -60,7 +60,7 @@ object RandomizeMoves
 			val number: Int = pokeNum
 			pokemons(number).foreach { poke =>
 				val moveListBuilder = new util.ArrayList[MoveLearnt]()
-				apply(poke, originalMovesLearnt.get(pokeNum).iterator().asScala.toVector,
+				apply(poke, originalMovesLearnt.get(pokeNum).iterator().asScala.toVector, currentTypes,
 					typeConversions.getOrElse(number, Map()), addedTypes.get(number),
 					statModifiers.getOrElse(number, Map()), statSwaps.getOrElse(number, Map()))
 					.foreach { case (level, moveNumber) =>
@@ -87,14 +87,14 @@ object RandomizeMoves
 	}
 	
 	// Returns new moves to assign (level -> move number)
-	private def apply(poke: Pokemon, originalMovesLearnt: Seq[MoveLearnt],
+	private def apply(poke: Pokemon, originalMovesLearnt: Seq[MoveLearnt], currentTypes: Types,
 	          typeConversions: Map[Type, Type], addedType: Option[Type],
 	          statModifiers: Map[PokeStat, Double], statSwaps: Map[PokeStat, PokeStat])
 	         (implicit moves: Moves, settings: Settings, rom: RomHandler) =
 	{
 		val physicalToSpecialRatio = poke.getAttackSpecialAttackRatio
-		val currentTypes = TypeSet.from(poke)
-		val currentRelations = TypeRelations.of(currentTypes)
+		val currentType = currentTypes(poke)
+		val currentRelations = TypeRelations.of(currentType)
 		// Whether attack and special attack have been so modified that moves need to be altered
 		val categoriesChanged = statSwaps.contains(Attack) || statSwaps.contains(SpecialAttack) ||
 			(math.abs(statModifiers.getOrElse(Attack, 1.0) - statModifiers.getOrElse(SpecialAttack, 1.0))
@@ -112,7 +112,7 @@ object RandomizeMoves
 			val moveType = addedType.filter { _ => RandomSource.nextDouble() < addedTypeMoveChance }
 				.getOrElse {
 					if (chance(ownTypeMoveChance))
-						currentTypes.random
+						currentType.random
 					else
 						currentRelations.random(typeWeights)
 				}
@@ -130,7 +130,7 @@ object RandomizeMoves
 					originalMoveType
 				// Case: STAB move
 				else if (chance(ownTypeMoveChance))
-					currentTypes.random
+					currentType.random
 				// Case: Other type (relative to the original move type)
 				else
 					TypeRelations.of(originalMoveType).random(typeWeights)

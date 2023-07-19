@@ -4,11 +4,20 @@ import com.dabomstew.pkrandom.pokemon.Pokemon
 import com.dabomstew.pkrandom.romhandlers.RomHandler
 import com.dabomstew.pkrandom.{RandomSource, RomFunctions}
 import utopia.flow.collection.CollectionExtensions._
+import utopia.flow.collection.immutable.Pair
+import utopia.flow.collection.immutable.range.NumericSpan
+import vf.model.EvolveGroup.assumedFormLevelDuration
 
+import scala.collection.immutable.NumericRange
 import scala.jdk.CollectionConverters._
 
 object EvolveGroup
 {
+	// ATTRIBUTES   ----------------------
+	
+	private val assumedFormLevelDuration = 15
+	
+	
 	// COMPUTED --------------------------
 	
 	def all(implicit rom: RomHandler) =
@@ -60,8 +69,30 @@ object EvolveGroup
  *                 Applicable for secondary splitting evolves, only.
  * @param megas Mega evolution(s) for of the final evolved form, if applicable
  */
+// TODO: Handle alternative pokemon forms (should still count as one pokemon / group)
 case class EvolveGroup(forms: Vector[Pokemon], baseForm: Option[Pokemon] = None, megas: Set[Pokemon] = Set.empty)
 {
+	// ATTRIBUTES   ---------------------
+	
+	lazy val levelThresholds = {
+		forms.tail.foldLeftIterator(forms.head -> 0) { case ((lastForm, lastLevel), poke) =>
+			// Finds the evolution-link between the two linear forms, if possible
+			val evo = poke.evolutionsFrom.asScala.find { _.from.number == lastForm.number }
+				.orElse { lastForm.evolutionsTo.asScala.find { _.to.number == poke.number } }
+				.orElse { poke.evolutionsFrom.asScala.headOption }
+				.orElse { lastForm.evolutionsTo.asScala.headOption }
+			// Gets the level threshold from the evolution-link, if possible
+			// Otherwise assumes a level range
+			val levelThreshold = evo.filter { _.`type`.usesLevel() }.map { _.extraInfo }
+				.getOrElse { lastLevel + assumedFormLevelDuration }
+			poke -> levelThreshold
+		}.toVector
+	}
+	lazy val levelRanges = levelThresholds.paired.map { case Pair((poke, prev), (_, next)) =>
+		poke -> NumericSpan(prev, next - 1)
+	} :+ (levelThresholds.last._1 -> NumericSpan(levelThresholds.last._2, 100))
+	
+	
 	// COMPUTED -------------------------
 	
 	def finalForm = forms.last
@@ -79,6 +110,13 @@ case class EvolveGroup(forms: Vector[Pokemon], baseForm: Option[Pokemon] = None,
 	
 	
 	// OTHER    -------------------------
+	
+	def formAtLevel(level: Int) = {
+		levelThresholds.indexWhereOption { _._2 > level } match {
+			case Some(nextIndex) => forms(nextIndex - 1)
+			case None => finalForm
+		}
+	}
 	
 	def +:(baseForm: Pokemon) = copy(forms = baseForm +: forms, baseForm = None)
 }

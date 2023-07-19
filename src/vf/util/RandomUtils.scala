@@ -44,5 +44,10 @@ object RandomUtils
 		}.find { _._2 >= threshold }.getOrElse(relativized.last)._1
 	}
 	
-	def randomFrom[A](coll: Seq[A]) = coll(RandomSource.nextInt(coll.size))
+	def randomFrom[A](coll: Seq[A]) = {
+		if (coll hasSize 1)
+			coll.head
+		else
+			coll(RandomSource.nextInt(coll.size))
+	}
 }

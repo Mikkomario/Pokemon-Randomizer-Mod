@@ -446,6 +446,30 @@ public class Randomizer {
         // 4. Modify rivals to carry starters
         // 5. Force Trainer Pokemon to be fully evolved
 
+        // NB: Moved from below (required for custom trainer randomization)
+        switch (settings.getWildPokemonMod()) {
+            case RANDOM:
+                romHandler.randomEncounters(settings);
+                wildsChanged = true;
+                break;
+            case AREA_MAPPING:
+                romHandler.area1to1Encounters(settings);
+                wildsChanged = true;
+                break;
+            case GLOBAL_MAPPING:
+                // NB: Replaced with a custom implementation
+                context.randomizeWildEncounters();
+                // romHandler.game1to1Encounters(settings);
+                wildsChanged = true;
+                break;
+            default:
+                if (settings.isWildLevelsModified()) {
+                    romHandler.onlyChangeWildLevels(settings);
+                    wildsChanged = true;
+                }
+                break;
+        }
+
         if (settings.getAdditionalRegularTrainerPokemon() > 0
                 || settings.getAdditionalImportantTrainerPokemon() > 0
                 || settings.getAdditionalBossTrainerPokemon() > 0) {
@@ -582,28 +606,6 @@ public class Randomizer {
 
         if (settings.isUseMinimumCatchRate()) {
             romHandler.changeCatchRates(settings);
-        }
-
-        // TODO: Custom implementation
-        switch (settings.getWildPokemonMod()) {
-            case RANDOM:
-                romHandler.randomEncounters(settings);
-                wildsChanged = true;
-                break;
-            case AREA_MAPPING:
-                romHandler.area1to1Encounters(settings);
-                wildsChanged = true;
-                break;
-            case GLOBAL_MAPPING:
-                romHandler.game1to1Encounters(settings);
-                wildsChanged = true;
-                break;
-            default:
-                if (settings.isWildLevelsModified()) {
-                    romHandler.onlyChangeWildLevels(settings);
-                    wildsChanged = true;
-                }
-                break;
         }
 
         if (wildsChanged) {

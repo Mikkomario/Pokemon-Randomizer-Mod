@@ -48,6 +48,12 @@ public interface RomHandler {
         public abstract boolean isLoadable(String filename);
     }
 
+    // Functions added in order to enable customization outside this RomHandler
+
+    // For ORAS and others where randomization would break encounters, returns modified encounter-sets
+    public List<EncounterSet> collapsedEncounters(boolean useTimeOfDay);
+
+
     // =======================
     // Basic load/save methods
     // =======================

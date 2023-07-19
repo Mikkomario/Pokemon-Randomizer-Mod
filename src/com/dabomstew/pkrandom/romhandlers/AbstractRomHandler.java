@@ -885,6 +885,15 @@ public abstract class AbstractRomHandler implements RomHandler {
         setEncounters(useTimeOfDay, currentEncounters);
     }
 
+    // NB: Added
+    @Override
+    public List<EncounterSet> collapsedEncounters(boolean useTimeOfDay) {
+        if (isORAS)
+            return collapseAreasORAS(getEncounters(useTimeOfDay));
+        else
+            return getEncounters(useTimeOfDay);
+    }
+
     @Override
     public void area1to1Encounters(Settings settings) {
         boolean useTimeOfDay = settings.isUseTimeBasedEncounters();
@@ -893,6 +902,7 @@ public abstract class AbstractRomHandler implements RomHandler {
         if (isORAS) {
             List<EncounterSet> collapsedEncounters = collapseAreasORAS(currentEncounters);
             area1to1EncountersImpl(collapsedEncounters, settings);
+            // TODO: Is this really correct, setting the non-collapsed encounters back?
             setEncounters(useTimeOfDay, currentEncounters);
             return;
         } else {
