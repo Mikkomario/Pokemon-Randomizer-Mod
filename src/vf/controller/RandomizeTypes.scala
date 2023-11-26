@@ -5,8 +5,7 @@ import com.dabomstew.pkrandom.pokemon.Type
 import com.dabomstew.pkrandom.romhandlers.RomHandler
 import utopia.flow.collection.CollectionExtensions._
 import vf.model.TypeRelation.{Relative, StrongRelative, Unrelated, WeakRelative}
-import vf.model.{EvolveGroup, TypeRelation, TypeRelations, Types}
-import vf.util.PokemonExtensions._
+import vf.model.{EvolveGroup, TypeRelation, TypeRelations}
 
 import scala.jdk.CollectionConverters._
 
@@ -34,7 +33,7 @@ object RandomizeTypes
 	
 	// OTHER    --------------------------
 	
-	def all()(implicit groups: IterableOnce[EvolveGroup], types: Types, rom: RomHandler): (Map[Int, Map[Type, Type]], Map[Int, Type]) = {
+	def all()(implicit groups: IterableOnce[EvolveGroup], rom: RomHandler): (Map[Int, Map[Type, Type]], Map[Int, Type]) = {
 		val (conversions, additions) = groups.iterator.splitFlatMap(apply)
 		conversions.toMap -> additions.toMap
 	}
@@ -50,10 +49,10 @@ object RandomizeTypes
 	// Returns
 	// 1) All type swaps (bound to pokemon number)
 	// 2) All type additions (bound to pokemon number)
-	def apply(group: EvolveGroup)(implicit types: Types, rom: RomHandler): (Map[Int, Map[Type, Type]], Map[Int, Type]) = {
+	def apply(group: EvolveGroup)(implicit rom: RomHandler): (Map[Int, Map[Type, Type]], Map[Int, Type]) = {
 		// Case: Adds a secondary type
 		if (group.canAddSecondaryType && RandomSource.nextDouble() < addSecondaryChance) {
-			val baseType = types(group.finalForm).primary
+			val baseType = group.finalForm.primaryType
 			val newType = TypeRelations.of(baseType).random(addSecondaryWeights)
 			
 			// May also alter the primary type(s) (lowered chance)
@@ -165,7 +164,7 @@ object RandomizeTypes
 			Map[Int, Map[Type, Type]]() -> Map[Int, Type]()
 	}
 	
-	private def applyPrimaryConversions(group: EvolveGroup, conversions: Map[Type, Type])(implicit types: Types) =
+	private def applyPrimaryConversions(group: EvolveGroup, conversions: Map[Type, Type]) =
 		group.iterator.flatMap { poke =>
 			val original = poke.types
 			conversions.get(original.primary).map { newType =>

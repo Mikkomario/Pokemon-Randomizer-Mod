@@ -1,12 +1,9 @@
 package vf.controller
 
 import com.dabomstew.pkrandom.constants.Items
-import com.dabomstew.pkrandom.pokemon.{EvolutionType, Pokemon}
-import com.dabomstew.pkrandom.romhandlers.RomHandler
+import com.dabomstew.pkrandom.pokemon.EvolutionType
 import utopia.flow.collection.CollectionExtensions._
-import vf.util.PokemonExtensions._
-
-import scala.jdk.CollectionConverters._
+import vf.model.{EvolveGroup, Poke}
 
 /**
  * Replaces inconvenient evolutions with easier evolutions.
@@ -19,7 +16,6 @@ object MakeEvolvesEasier
 	// ATTRIBUTES   ------------------------
 	
 	private val level = EvolutionType.LEVEL
-	private val stones = Set(EvolutionType.STONE, EvolutionType.STONE_MALE_ONLY, EvolutionType.STONE_FEMALE_ONLY)
 	
 	private val firstEvolveLevel = 21
 	private val lastEvolveLevel = 36
@@ -51,18 +47,18 @@ object MakeEvolvesEasier
 	
 	// OTHER    ----------------------------
 	
-	// TODO: Ordering is important. This implementation assumes that non-evolved
-	//  forms appear before the evolved forms in the input list
-	def all()(implicit rom: RomHandler) = rom.getPokemonInclFormes.forEach { poke => Option(poke).foreach(apply) }
+	def all(evoGroups: IterableOnce[EvolveGroup]) = evoGroups.iterator.foreach { group =>
+		group.iterator.foreach(apply)
+	}
 	
-	def apply(poke: Pokemon) = {
-		val evolves = poke.evolutionsTo.iterator().asScala.toVector
+	def apply(poke: Poke) = {
+		val evolves = poke.toEvos
 		lazy val evolveLevel = {
-			if (poke.evolutionsFrom.isEmpty)
+			if (poke.isBasicForm)
 				firstEvolveLevel
 			else
-				poke.evolutionsFrom.iterator().asScala.find { _.`type`.usesLevel() } match {
-					case Some(earlier) => earlier.extraInfo + midFormLevels
+				poke.fromEvos.findMap { _.levelThreshold } match {
+					case Some(earlier) => earlier + midFormLevels
 					case None => lastEvolveLevel
 				}
 		}
@@ -70,35 +66,25 @@ object MakeEvolvesEasier
 		if (evolves.nonEmpty) {
 			evolves.oneOrMany match {
 				case Left(onlyEvolve) =>
-					if (onlyEvolve.`type` != level) {
-						onlyEvolve.`type` = level
-						onlyEvolve.extraInfo = evolveLevel
-					}
+					if (onlyEvolve.nonLevelBased)
+						onlyEvolve.makeLevelBased(evolveLevel)
 				case Right(evolves) =>
 					// Converts one of the evolves into a simple level evolve, if possible
-					val hasLevel = evolves.exists { _.`type` == level }
-					val toLevelEvo = {
-						if (hasLevel)
-							None
-						else
-							toLevelOptions.findMap { o => evolves.find { _.`type` == o } }
-					}
-					toLevelEvo.foreach { evo =>
-						evo.`type` = level
-						evo.extraInfo = evolveLevel
-					}
+					val hasLevel = evolves.exists { _.evoType == level }
+					val toLevelEvo =
+						if (hasLevel) None else toLevelOptions.findMap { o => evolves.find { _.evoType == o } }
+					toLevelEvo.foreach { _.makeLevelBased(evolveLevel) }
 					// May modify the other evolves
 					evolves.iterator.foreach { evo =>
 						// Makes to evolve with a stone
 						def convertToStone(stone: Int) = {
-							if (!evolves.exists { e => stones.contains(e.`type`) && e.extraInfo == stone }) {
-								evo.`type` = EvolutionType.STONE
-								evo.extraInfo = stone
+							if (!evolves.exists { _.usesStone(stone) }) {
+								evo.makeStoneBased(stone)
 								// Also gives that stone as held item
 								poke.giveItem(stone)
 							}
 						}
-						evo.`type` match {
+						evo.evoType match {
 							// Case: Item-related evo => Gives the required item as a held item
 							case EvolutionType.STONE | EvolutionType.STONE_MALE_ONLY | EvolutionType.STONE_FEMALE_ONLY |
 							     EvolutionType.LEVEL_ITEM_DAY |
@@ -111,6 +97,7 @@ object MakeEvolvesEasier
 						}
 					}
 			}
+			poke.updateState()
 		}
 	}
 }

@@ -2,11 +2,10 @@ package vf.controller
 
 import com.dabomstew.pkrandom.RandomSource
 import com.dabomstew.pkrandom.constants.Species
-import vf.model.{EvolveGroup, PokeStat}
 import utopia.flow.collection.CollectionExtensions._
 import utopia.flow.collection.immutable.Pair
 import vf.model.PokeStat.Hp
-import vf.util.PokemonExtensions._
+import vf.model.{EvolveGroup, PokeStat}
 
 /**
  * Implementation for stats-randomization

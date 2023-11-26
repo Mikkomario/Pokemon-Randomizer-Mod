@@ -2,10 +2,13 @@ package vf.model
 
 import com.dabomstew.pkrandom.RandomSource
 import com.dabomstew.pkrandom.pokemon.{Pokemon, Type}
+import com.dabomstew.pkrandom.romhandlers.RomHandler
 import utopia.flow.collection.immutable.Pair
 
 object TypeSet
 {
+	type PokeType = Type
+	
 	def from(pokemon: Pokemon) =
 		apply(pokemon.primaryType, Option(pokemon.secondaryType).filterNot { _ == pokemon.primaryType })
 	
@@ -29,6 +32,11 @@ case class TypeSet(primary: Type, secondary: Option[Type] = None)
 	
 	def random = secondary.filter { _ => RandomSource.nextBoolean() }.getOrElse(primary)
 	
+	def isSingleType = secondary.isEmpty
+	def isDualType = !isSingleType
+	
+	def relations(implicit rom: RomHandler) = TypeRelations.of(this)
+	
 	
 	// OTHER    ---------------------
 	
@@ -44,4 +52,7 @@ case class TypeSet(primary: Type, secondary: Option[Type] = None)
 		else
 			other.secondary.filter(contains).map { TypeSet(_) }
 	}
+	
+	def withPrimary(t: Type) = copy(primary = t)
+	def withSecondary(t: Type) = copy(secondary = Some(t))
 }

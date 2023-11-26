@@ -1,7 +1,10 @@
 package vf.model
 
-import utopia.flow.operator.Extreme.{Max, Min}
-import utopia.flow.operator.{Extreme, SelfComparable, Sign, Steppable}
+import utopia.flow.operator.enumeration.Extreme.{Max, Min}
+import utopia.flow.operator.Steppable
+import utopia.flow.operator.enumeration.Extreme
+import utopia.flow.operator.ordering.SelfComparable
+import utopia.flow.operator.sign.Sign
 
 /**
  * Represents a relationship between two pokemon types

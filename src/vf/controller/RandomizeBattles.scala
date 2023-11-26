@@ -1,12 +1,11 @@
 package vf.controller
 
-import com.dabomstew.pkrandom.{RandomSource, Settings}
-import com.dabomstew.pkrandom.pokemon.{Pokemon, Trainer}
+import com.dabomstew.pkrandom.pokemon.Trainer
 import com.dabomstew.pkrandom.romhandlers.RomHandler
-import utopia.flow.collection.immutable.caching.cache.Cache
+import com.dabomstew.pkrandom.{RandomSource, Settings}
 import utopia.flow.collection.immutable.range.Span
 import vf.model.TypeRelation.{Relative, StrongRelative, Unrelated, WeakRelative}
-import vf.model.{EvolveGroup, TypeRelation, TypeRelations, Types}
+import vf.model._
 import vf.util.RandomUtils._
 
 import scala.collection.mutable
@@ -36,11 +35,10 @@ object RandomizeBattles
 	
 	def all() = ???
 	
-	def apply(trainer: Trainer, levelMod: Double, originalTypes: Types, currentTypes: Types,
-	          originalBstValues: Map[Int, Int], currentBstValues: Map[Int, Int],
+	def apply(trainer: Trainer, levelMod: Double,
 	          pokeMapping: Map[Int, Vector[EvolveGroup]], pokePool: Vector[EvolveGroup], groups: Map[Int, EvolveGroup],
 	          minAppearanceLevels: Map[EvolveGroup, Int])
-	         (implicit rom: RomHandler, settings: Settings) =
+	         (implicit rom: RomHandler, pokes: Pokes, settings: Settings) =
 	{
 		// Gym trainers, elite four, champion and others use stricter type-matching
 		lazy val useStrictTyping = Option(trainer.tag).exists { group =>
@@ -72,13 +70,13 @@ object RandomizeBattles
 				}
 				// Case: No mapping result available => Selects randomly from the pool
 				else
-					findMatchFor(tp.pokemon, originalGroup, level, pokePool, selectedGroups, minAppearanceLevels,
-						originalTypes, currentTypes, originalBstValues, currentBstValues, useStrictTyping)
+					findMatchFor(pokes(tp.pokemon), originalGroup, level, pokePool, selectedGroups, minAppearanceLevels,
+						useStrictTyping)
 			}
 			selectedGroups += selectedGroup
 			
 			// Assigns the selected poke
-			tp.pokemon = selectedPoke
+			tp.pokemon = selectedPoke.wrapped
 			tp.level = level
 			// tp.abilitySlot = getRandomAbilitySlot(newPK);
 			tp.resetMoves = true
@@ -90,30 +88,29 @@ object RandomizeBattles
 	}
 	
 	// TODO: Handle mega-evolve swap
-	private def findMatchFor(original: Pokemon, originalGroup: EvolveGroup, level: Int, pool: Vector[EvolveGroup],
+	private def findMatchFor(original: Poke, originalGroup: EvolveGroup, level: Int, pool: Vector[EvolveGroup],
 	                         used: mutable.Set[EvolveGroup], minAppearanceLevels: Map[EvolveGroup, Int],
-	                         originalTypes: Types, currentTypes: Types,
-	                         originalBstValues: Map[Int, Int], currentBstValues: Map[Int, Int], useStrictTyping: Boolean)
+	                         useStrictTyping: Boolean)
 	                        (implicit rom: RomHandler) =
 	{
 		// Applies the following filters:
 		//      1) Min appearance level filter
 		//      2) Non-duplicate filter
 		//      3) BST filter
-		lazy val originalBst = originalBstValues(original.number).toDouble
+		lazy val originalBst = original.originalState.bst.toDouble
 		lazy val allowedBst = bstRange.mapEnds { _ * originalBst }
-		lazy val originalType = originalTypes(original)
+		lazy val originalType = original.originalState.types
 		lazy val typeRelations = TypeRelations.of(originalType)
 		
 		val options = pool.flatMap { group =>
 			// 1 & 2
 			if (minAppearanceLevels.get(group).forall { _ <= level } && !used.contains(group)) {
 				val form = group.formAtLevel(level)
-				val bstRatio = currentBstValues(form.number) / originalBst
+				val bstRatio = form.bstChange
 				// 3
 				if (allowedBst.contains(bstRatio)) {
 					// May apply type-filtering also
-					val typeRelation = typeRelations(currentTypes(form))
+					val typeRelation = typeRelations(form.types)
 					if (!useStrictTyping || typeRelation >= minStrictTypeRelation) {
 						// Calculates a weight modifier based on BST and type
 						val bstWeight = math.pow(1 - (1 - bstRatio).abs, bstDiffWeightMod)

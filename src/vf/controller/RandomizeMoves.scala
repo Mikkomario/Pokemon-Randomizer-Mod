@@ -5,8 +5,7 @@ import com.dabomstew.pkrandom.romhandlers.RomHandler
 import com.dabomstew.pkrandom.{RandomSource, Settings}
 import utopia.flow.collection.CollectionExtensions._
 import utopia.flow.collection.immutable.Pair
-import utopia.flow.collection.immutable.range.{HasInclusiveEnds, Span}
-import vf.model.PokeStat.{Attack, SpecialAttack}
+import utopia.flow.collection.immutable.range.{HasInclusiveOrderedEnds, Span}
 import vf.model.TypeRelation.{Relative, StrongRelative, Unrelated, WeakRelative}
 import vf.model._
 import vf.util.RandomUtils._
@@ -34,7 +33,7 @@ object RandomizeMoves
 	// Applied when attack and special attack -ratio is modified
 	private val decreasedSameCategoryChance = 0.15
 	// Threshold before considering attack vs. special attack modified
-	private val attackModifierDifferenceThreshold = 0.2
+	// private val attackModifierDifferenceThreshold = 0.2
 	// This value is applied in reduction. E.g. at least 100% - X% power
 	// Power increase is stronger (e.g. -50% converts to +100%)
 	private val swapMaxPowerDifference = 0.35
@@ -48,9 +47,7 @@ object RandomizeMoves
 	// OTHER    -------------------------
 	
 	// Randomizes moves for all pokemon
-	def all(currentTypes: Types, typeConversions: Map[Int, Map[Type, Type]], addedTypes: Map[Int, Type],
-	        statModifiers: Map[Int, Map[PokeStat, Double]], statSwaps: Map[Int, Map[PokeStat, PokeStat]])
-	       (implicit rom: RomHandler, pokemons: Pokemons, moves: Moves, settings: Settings) =
+	def all()(implicit rom: RomHandler, pokes: Pokes, moves: Moves, settings: Settings) =
 	{
 		// Stores moves in java data structures because of the rom interface
 		val originalMovesLearnt = rom.getMovesLearnt
@@ -58,22 +55,14 @@ object RandomizeMoves
 		// Randomizes moves for all pokemon
 		originalMovesLearnt.keySet().iterator().asScala.foreach { pokeNum =>
 			val number: Int = pokeNum
-			pokemons(number).foreach { poke =>
+			pokes(number).foreach { poke =>
 				val moveListBuilder = new util.ArrayList[MoveLearnt]()
-				apply(poke, originalMovesLearnt.get(pokeNum).iterator().asScala.toVector, currentTypes,
-					typeConversions.getOrElse(number, Map()), addedTypes.get(number),
-					statModifiers.getOrElse(number, Map()), statSwaps.getOrElse(number, Map()))
-					.foreach { case (level, moveNumber) =>
-						val learnt = new MoveLearnt()
-						learnt.move = moveNumber
-						learnt.level = level
-						moveListBuilder.add(learnt)
-					}
+				apply(poke).foreach { move => moveListBuilder.add(move.toMoveLearnt) }
 				newMovesBuilder.put(pokeNum, moveListBuilder)
 			}
 		}
 		// Makes sure cosmetic forms have the same moves as their base forms
-		pokemons.cosmeticForms.foreach { cosmeticPoke =>
+		pokes.cosmeticForms.foreach { cosmeticPoke =>
 			if (originalMovesLearnt.containsKey(cosmeticPoke.number: Integer) &&
 				originalMovesLearnt.containsKey(cosmeticPoke.baseForme.number: Integer))
 			{
@@ -84,21 +73,17 @@ object RandomizeMoves
 		}
 		// Applies the new moves
 		rom.setMovesLearnt(newMovesBuilder)
+		pokes.foreach { _.updateState() }
 	}
 	
 	// Returns new moves to assign (level -> move number)
-	private def apply(poke: Pokemon, originalMovesLearnt: Seq[MoveLearnt], currentTypes: Types,
-	          typeConversions: Map[Type, Type], addedType: Option[Type],
-	          statModifiers: Map[PokeStat, Double], statSwaps: Map[PokeStat, PokeStat])
-	         (implicit moves: Moves, settings: Settings, rom: RomHandler) =
+	private def apply(poke: Poke)
+	                 (implicit moves: Moves, settings: Settings, rom: RomHandler): Vector[MoveLearn] =
 	{
-		val physicalToSpecialRatio = poke.getAttackSpecialAttackRatio
-		val currentType = currentTypes(poke)
-		val currentRelations = TypeRelations.of(currentType)
+		val typeConversions = poke.typeSwaps
+		val currentRelations = poke.types.relations
 		// Whether attack and special attack have been so modified that moves need to be altered
-		val categoriesChanged = statSwaps.contains(Attack) || statSwaps.contains(SpecialAttack) ||
-			(math.abs(statModifiers.getOrElse(Attack, 1.0) - statModifiers.getOrElse(SpecialAttack, 1.0))
-				>= attackModifierDifferenceThreshold)
+		val categoriesChanged = poke.attackToSpAttackRatioHasReversed
 		val actualSameCategoryChance = if (categoriesChanged) decreasedSameCategoryChance else sameCategoryChance
 		
 		// Contains move numbers of all already picked moves
@@ -109,14 +94,14 @@ object RandomizeMoves
 			// Prefers added type, if applicable
 			// Secondarily, prefers own type
 			// Thirdly, selects from related types
-			val moveType = addedType.filter { _ => RandomSource.nextDouble() < addedTypeMoveChance }
+			val moveType = poke.addedType.filter { _ => RandomSource.nextDouble() < addedTypeMoveChance }
 				.getOrElse {
 					if (chance(ownTypeMoveChance))
-						currentType.random
+						poke.types.random
 					else
 						currentRelations.random(typeWeights)
 				}
-			val category = randomCategoryIn(moveType, physicalToSpecialRatio)
+			val category = randomCategoryIn(moveType, poke.attackSpAttackRatio)
 			randomMove(pickedMovesBuilder, moveType, category)
 		}
 		// Finds a relative random move
@@ -130,7 +115,7 @@ object RandomizeMoves
 					originalMoveType
 				// Case: STAB move
 				else if (chance(ownTypeMoveChance))
-					currentType.random
+					poke.types.random
 				// Case: Other type (relative to the original move type)
 				else
 					TypeRelations.of(originalMoveType).random(typeWeights)
@@ -141,7 +126,7 @@ object RandomizeMoves
 					original.category
 				// Case: Move acquires random category
 				else
-					randomCategoryIn(moveType, physicalToSpecialRatio)
+					randomCategoryIn(moveType, poke.attackSpAttackRatio)
 			}
 			// Selects from moves with similar strength, if applicable
 			val powerRange = {
@@ -171,9 +156,8 @@ object RandomizeMoves
 		def swapOrKeep(original: Move) = if (chance(swapMoveChance)) swapMove(original) else keepMove(original)
 		
 		// Assigns a certain number of starting and evo moves (based on settings)
-		val originalEvoMoves = originalMovesLearnt.takeWhile { _.level == 0 }.map { _.move }
-		val originalStartingMoves = originalMovesLearnt.view
-			.drop(originalEvoMoves.size).takeWhile { _.level == 1 }.map { _.move }.toVector
+		val originalEvoMoves = poke.originalState.evoMoves
+		val originalStartingMoves = poke.originalState.startingMoves
 		
 		val evoMoves = {
 			// Case: Already has evo moves => Possibly swaps them
@@ -196,13 +180,12 @@ object RandomizeMoves
 		}
 		
 		// Swaps (some of) the original moves
-		val newDefaultMoves = originalMovesLearnt.drop(originalEvoMoves.size + originalStartingMoves.size)
-			.map { learnt => learnt.level -> swapOrKeep(moves.byNumber(learnt.move)) }
+		val newDefaultMoves = poke.normalMoves.map { _.mapMove { move => swapOrKeep(moves.byNumber(move)) } }
 		
 		// Assigns new moves to the between-levels
 		val newMoveLevels = {
 			if (extraMoveRatio > 0)
-				newDefaultMoves.iterator.map { _._1 }.paired
+				newDefaultMoves.iterator.map { _.level }.paired
 					.flatMap { case Pair(previous, next) =>
 						distinctNextInts(extraMoveRatio, next - previous - 1).map { previous + _ + 1 }
 					}
@@ -212,7 +195,7 @@ object RandomizeMoves
 				Vector()
 		}
 		val (newNonDamagingMoves, newDamagingMoves) = Vector.fill(newMoveLevels.size) { moves.byNumber(newMove()) }
-			.divideBy { _.power > 0 }
+			.divideBy { _.power > 0 }.toTuple
 		// Orders these new moves by power
 		// Non-power moves are placed randomly
 		val newMovesBuffer = mutable.Buffer.from(newDamagingMoves.sortBy { m => m.power * m.hitCount * m.hitratio })
@@ -221,10 +204,10 @@ object RandomizeMoves
 		}
 		
 		// Returns the combined move-list
-		evoMoves.map { 0 -> _ } ++ startingMoves.map { 1 -> _ } ++
+		evoMoves.map(MoveLearn.evo) ++ startingMoves.map(MoveLearn.start) ++
 			(newDefaultMoves ++ newMoveLevels.iterator.zip(newMovesBuffer)
-				.map { case (level, move) => level -> move.number })
-				.sortBy { _._1 }
+				.map { case (level, move) => MoveLearn(level, move.number) })
+				.sortBy { _.level }
 	}
 	
 	// Selects from physical vs. special based on stats
@@ -240,13 +223,13 @@ object RandomizeMoves
 	
 	// Randomly selects the move from available options
 	private def randomMove(pickedMovesBuilder: mutable.Set[Int], moveType: Type, category: MoveCategory,
-	                       powerRange: Option[HasInclusiveEnds[Double]] = None)
+	                       powerRange: Option[HasInclusiveOrderedEnds[Double]] = None)
 	                      (implicit moves: Moves): Int =
 		randomMove(Some(moveType), Some(category), powerRange, pickedMovesBuilder)
 	
 	@tailrec
 	private def randomMove(moveType: Option[Type], category: Option[MoveCategory],
-	                       powerRange: Option[HasInclusiveEnds[Double]], pickedMovesBuilder: mutable.Set[Int])
+	                       powerRange: Option[HasInclusiveOrderedEnds[Double]], pickedMovesBuilder: mutable.Set[Int])
 	                      (implicit moves: Moves): Int =
 	{
 		// Filters move options by type and category

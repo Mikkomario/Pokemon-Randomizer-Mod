@@ -1,14 +1,13 @@
 package vf.controller
 
 import com.dabomstew.pkrandom.Settings
-import com.dabomstew.pkrandom.pokemon.Pokemon
 import com.dabomstew.pkrandom.romhandlers.RomHandler
 import utopia.flow.collection.CollectionExtensions._
 import utopia.flow.collection.immutable.Pair
 import utopia.flow.collection.immutable.range.{NumericSpan, Span}
 import utopia.flow.util.NotEmpty
 import vf.model.TypeRelation.{Relative, StrongRelative, WeakRelative}
-import vf.model.{EvolveGroup, TypeRelation, TypeRelations, Types}
+import vf.model.{EvolveGroup, Poke, TypeRelation, TypeRelations}
 import vf.util.RandomUtils._
 
 import scala.collection.mutable
@@ -42,8 +41,7 @@ object RandomizeWildEncounters
 	// OTHER    -----------------------------
 	
 	// Returns the poke-mapping and the lowest appearance levels of each poke-group
-	def all(evolveGroups: Iterable[EvolveGroup], originalBstValues: Map[Int, Int], currentBstValues: Map[Int, Int],
-	        originalTypes: Types, currentTypes: Types)
+	def all(evolveGroups: Iterable[EvolveGroup])
 	       (implicit rom: RomHandler, settings: Settings) =
 	{
 		val useTimeOfDay = settings.isUseTimeBasedEncounters
@@ -91,8 +89,7 @@ object RandomizeWildEncounters
 					case None => Vector.fill(matchCount)(None)
 				}
 				requiredLevelRanges.map { range =>
-					val representation = findMatch(original, originalGroup, range, availableGroups,
-						originalBstValues, currentBstValues, originalTypes, currentTypes)
+					val representation = findMatch(original, originalGroup, range, availableGroups)
 					// Remembers that this group was used up
 					availableGroups -= representation._1
 					representation -> range
@@ -115,7 +112,7 @@ object RandomizeWildEncounters
 								val options = NotEmpty(matches.filter { _._2.forall { _ overlapsWith levels } })
 									.getOrElse(matches)
 								val (selectedGroup, selectedPoke) = randomFrom(options)._1
-								encounter.pokemon = selectedPoke
+								encounter.pokemon = selectedPoke.wrapped
 								selectedGroup -> levels.start
 							}
 							// Makes sure each appearance gets at least one encounter
@@ -124,7 +121,7 @@ object RandomizeWildEncounters
 								.filterNot { case ((group, _), _) => naturalResults.exists { _._1 == group } }
 								.map { case ((group, poke), _) =>
 									val encounter = randomFrom(encounters)._1
-									encounter.pokemon = poke
+									encounter.pokemon = poke.wrapped
 									group -> encounter.level
 								}
 							naturalResults ++ forcedAdditions
@@ -154,7 +151,7 @@ object RandomizeWildEncounters
 									else
 										selectedGroup.formAtLevel(levelRange.start)
 								}
-								encounter.pokemon = poke
+								encounter.pokemon = poke.wrapped
 							}
 							selectedGroup -> levelRange.start
 						}.toVector
@@ -173,9 +170,8 @@ object RandomizeWildEncounters
 		pokeMapping.view.mapValues { _.map { _._1._1 } }.toMap -> lowestAppearanceLevels
 	}
 	
-	private def findMatch(original: Pokemon, originalGroup: EvolveGroup, targetLevelRange: Option[NumericSpan[Int]],
-	                      groups: Iterable[EvolveGroup], originalBstValues: Map[Int, Int], currentBstValues: Map[Int, Int],
-	                      originalTypes: Types, currentTypes: Types)
+	private def findMatch(original: Poke, originalGroup: EvolveGroup, targetLevelRange: Option[NumericSpan[Int]],
+	                      groups: Iterable[EvolveGroup])
 	                     (implicit rom: RomHandler) =
 	{
 		// Requirements:
@@ -184,14 +180,11 @@ object RandomizeWildEncounters
 		//      2) Has similar strength during the specified level range
 		//      3) Has somewhat similar final form strength (loose)
 		//      4) Has similar current type, relative to the original poke's original type
-		lazy val originalBsts = Pair(original, originalGroup.finalForm).map { poke =>
-			originalBstValues.getOrElse(poke.number, poke.bstForPowerLevels()).toDouble
-		}
-		lazy val originalType = originalTypes(original)
+		lazy val originalType = original.originalState.types
 		lazy val typeRelations = TypeRelations.of(originalType)
 		val options = groups.flatMap { group =>
 			// Checks requirement 1
-			val forms = targetLevelRange.map { _.toPair.map(group.formAtLevel) }
+			val forms = targetLevelRange.map { _.ends.map(group.formAtLevel) }
 			if (forms.forall { _.isSymmetricBy { _.number } }) {
 				// Checks requirements 2 & 3
 				val form = forms match {
@@ -199,12 +192,10 @@ object RandomizeWildEncounters
 					case None => group.finalForm
 				}
 				val immediateAndFinal = Pair(form, group.finalForm)
-				val bstRatios = immediateAndFinal.mergeWith(originalBsts) { (poke, originalBst) =>
-					currentBstValues(poke.number) / originalBst
-				}
+				val bstRatios = immediateAndFinal.map { _.bstChange }
 				if (allowedBstRanges.mergeWith(bstRatios) { _.contains(_) }.forall { b => b }) {
 					// Checks requirement 4
-					val currentType = currentTypes(form)
+					val currentType = form.types
 					val typeRelation = typeRelations(currentType)
 					if (typeRelation >= minTypeRelation) {
 						// Calculates a randomization weight modifier based on the bst differences and type relations
