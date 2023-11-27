@@ -4,6 +4,9 @@ import com.dabomstew.pkrandom.pokemon.Trainer
 import com.dabomstew.pkrandom.romhandlers.RomHandler
 import com.dabomstew.pkrandom.{RandomSource, Settings}
 import utopia.flow.collection.immutable.range.Span
+import utopia.flow.util.NotEmpty
+import utopia.flow.collection.CollectionExtensions._
+import utopia.flow.view.mutable.eventful.Flag
 import vf.model.TypeRelation.{Relative, StrongRelative, Unrelated, WeakRelative}
 import vf.model._
 import vf.util.RandomUtils._
@@ -33,10 +36,28 @@ object RandomizeBattles
 	
 	// OTHER    --------------------------
 	
-	def all() = ???
+	def all(pokeMapping: Map[Int, Vector[EvolveGroup]], minAppearanceLevels: Map[EvolveGroup, Int])
+	       (implicit rom: RomHandler, pokes: Pokes, settings: Settings) =
+	{
+		val levelMod = 1 + settings.getTrainersLevelModifier / 100.0
+		// Indices poke groups by poke number. Only includes poke groups that appear in the 'minAppearanceLevels'
+		// (i.e. the wild)
+		val pokePool = minAppearanceLevels.keySet
+		val groupByNumber = pokePool.flatMap { g => g.iterator.map { _.number -> g } }.toMap
+		val trainers = rom.getTrainers
+		trainers.iterator().asScala
+			// This is the first rival in Yellow. His Pokemon is used to determine the non-player
+			// starter, so we can't change it here. Just skip it.
+			.filterNot { t => Option(t.tag).contains("IRIVAL") }
+			.foreach { trainer => apply(trainer, levelMod, pokeMapping, pokePool, groupByNumber, minAppearanceLevels) }
+		// TODO: Is double battle mode correct?
+		// Saves the changes to the ROM
+		rom.setTrainers(trainers, false)
+	}
 	
+	// TODO: Current implementation is missing rival starter handling. See if that needs to be added separately.
 	def apply(trainer: Trainer, levelMod: Double,
-	          pokeMapping: Map[Int, Vector[EvolveGroup]], pokePool: Vector[EvolveGroup], groups: Map[Int, EvolveGroup],
+	          pokeMapping: Map[Int, Vector[EvolveGroup]], pokePool: Iterable[EvolveGroup], groups: Map[Int, EvolveGroup],
 	          minAppearanceLevels: Map[EvolveGroup, Int])
 	         (implicit rom: RomHandler, pokes: Pokes, settings: Settings) =
 	{
@@ -54,14 +75,19 @@ object RandomizeBattles
 		//      - Won't select poke's that don't appear in the game at that point (level) yet
 		// Applies the randomization in random order
 		val selectedGroups = mutable.Set[EvolveGroup]()
+		// Can only apply one mega evo per trainer
+		val megaEvoFlag = Flag()
 		Random.shuffle(trainer.pokemon.asScala).foreach { tp =>
 			val originalNumber = tp.pokemon.number
 			val originalGroup = groups(originalNumber)
 			val level = math.round(tp.level * levelMod).toInt
+			// If the original poke can mega-evolve, requires the resulting poke to be able to do that as well
+			val requireMegaEvolvable = tp.canMegaEvolve
 			// Looks for a mapping result first
 			// TODO: Apply stricter type-checking here also?
 			val mappingOptions = pokeMapping.getOrElse(originalNumber, Vector())
-				.filter { g => minAppearanceLevels.get(g).forall { _ <= level } && !selectedGroups.contains(g) }
+				.filter { g => (!requireMegaEvolvable || g.canMegaEvolve) &&
+					minAppearanceLevels.get(g).forall { _ <= level } && !selectedGroups.contains(g) }
 			val (selectedGroup, selectedPoke) = {
 				// Case: Mapping result available => Selects one randomly
 				if (mappingOptions.nonEmpty) {
@@ -71,15 +97,24 @@ object RandomizeBattles
 				// Case: No mapping result available => Selects randomly from the pool
 				else
 					findMatchFor(pokes(tp.pokemon), originalGroup, level, pokePool, selectedGroups, minAppearanceLevels,
-						useStrictTyping)
+						useStrictTyping, requireMegaEvolvable)
 			}
 			selectedGroups += selectedGroup
 			
 			// Assigns the selected poke
-			tp.pokemon = selectedPoke.wrapped
+			// TODO: Apply random form
+			tp.pokemon = selectedPoke.randomForm
 			tp.level = level
-			// tp.abilitySlot = getRandomAbilitySlot(newPK);
+			tp.abilitySlot = selectedPoke.abilitySlots.random
 			tp.resetMoves = true
+			
+			// Enables mega evolution for all pokes that support it
+			NotEmpty(selectedPoke.toMegaEvos.filter { _.method == 1 }).foreach { megaEvos =>
+				if (megaEvoFlag.set()) {
+					val megaEvo = megaEvos.random
+					tp.heldItem = megaEvo.argument
+				}
+			}
 			
 			// Applies shiny chance (optional)
 			if (settings.isShinyChance && RandomSource.nextInt(256) == 0)
@@ -87,24 +122,26 @@ object RandomizeBattles
 		}
 	}
 	
-	// TODO: Handle mega-evolve swap
-	private def findMatchFor(original: Poke, originalGroup: EvolveGroup, level: Int, pool: Vector[EvolveGroup],
+	private def findMatchFor(original: Poke, originalGroup: EvolveGroup, level: Int, pool: Iterable[EvolveGroup],
 	                         used: mutable.Set[EvolveGroup], minAppearanceLevels: Map[EvolveGroup, Int],
-	                         useStrictTyping: Boolean)
+	                         useStrictTyping: Boolean, requireMegaEvolvable: Boolean)
 	                        (implicit rom: RomHandler) =
 	{
 		// Applies the following filters:
 		//      1) Min appearance level filter
 		//      2) Non-duplicate filter
 		//      3) BST filter
-		lazy val originalBst = original.originalState.bst.toDouble
+		//      4) Mega filter
+		lazy val originalBst = original.originalState.bst
 		lazy val allowedBst = bstRange.mapEnds { _ * originalBst }
 		lazy val originalType = original.originalState.types
 		lazy val typeRelations = TypeRelations.of(originalType)
 		
 		val options = pool.flatMap { group =>
-			// 1 & 2
-			if (minAppearanceLevels.get(group).forall { _ <= level } && !used.contains(group)) {
+			// 1, 2 & 4
+			if ((!requireMegaEvolvable || group.canMegaEvolve) &&
+				minAppearanceLevels.get(group).forall { _ <= level } && !used.contains(group))
+			{
 				val form = group.formAtLevel(level)
 				val bstRatio = form.bstChange
 				// 3
@@ -134,14 +171,12 @@ object RandomizeBattles
 			weighedRandom(options)
 	}
 	
-	// Math.round(tp.level * (1 + levelModifier / 100.0))
-	// List<Trainer> currentTrainers = this.getTrainers();
+	
 	/*
 	boolean includeFormes = settings.isAllowTrainerAlternateFormes();
 			boolean banIrregularAltFormes = settings.isBanIrregularAltFormes();
 			boolean swapMegaEvos = settings.isSwapTrainerMegaEvos();
 	 */
-	// oolean shinyChance = settings.isShinyChance();
 	//  boolean rivalCarriesStarter = settings.isRivalCarriesStarterThroughout();
 	/*
 	// Construct groupings for types
@@ -207,38 +242,4 @@ object RandomizeBattles
 	 */
 	// List<Integer> eliteFourIndices = getEliteFourTrainers(forceChallengeMode);
 	// List<Integer> mainPlaythroughTrainers = getMainPlaythroughTrainers();
-	/*
-	if (t.tag != null && t.tag.equals("IRIVAL")) {
-					// This is the first rival in Yellow. His Pokemon is used to determine the non-player
-					// starter, so we can't change it here. Just skip it.
-					continue;
-				}
-	 */
-	// boolean swapThisMegaEvo = swapMegaEvos && tp.canMegaEvolve();
-	
-	/*
-	f (swapThisMegaEvo) {
-						tp.heldItem = newPK
-										.megaEvolutionsFrom
-										.get(this.random.nextInt(newPK.megaEvolutionsFrom.size()))
-										.argument;
-					}
-	 */
-	
-	/*
-	// Save it all up
-			this.setTrainers(currentTrainers, false);
-	 */
-	/*
-	if (swapMegaEvos) {
-				pickFrom = megaEvolutionsList
-						.stream()
-						.filter(mega -> mega.method == 1)
-						.map(mega -> mega.from)
-						.distinct()
-						.collect(Collectors.toList());
-			} else {
-				pickFrom = cachedAllList;
-			}
-	 */
 }

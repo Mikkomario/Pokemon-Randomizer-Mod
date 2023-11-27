@@ -27,6 +27,7 @@ class JavaRandomizationContext(implicit romHandler: RomHandler, settings: Settin
 		RandomizeTypes.all()
 		RandomizeTypes.fixCosmeticForms()
 	}
+	def randomizeAbilities() = RandomizeAbilities.all(evolveGroups)
 	def randomizeStats() = RandomizeStats.all()
 	def makeEvolvesEasier() = MakeEvolvesEasier.all(evolveGroups)
 	def randomizeMoves() = RandomizeMoves.all()
@@ -35,4 +36,5 @@ class JavaRandomizationContext(implicit romHandler: RomHandler, settings: Settin
 		pokeMapping = mapping
 		minAppearanceLevels = appearance
 	}
+	def randomizeTrainerPokes() = RandomizeBattles.all(pokeMapping, minAppearanceLevels)
 }

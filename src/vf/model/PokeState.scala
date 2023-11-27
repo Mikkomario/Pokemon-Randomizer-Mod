@@ -10,9 +10,10 @@ object PokeState
 {
 	def from(poke: Pokemon)(implicit rom: RomHandler) = apply(
 		types = TypeSet.from(poke),
+		abilities = Vector(poke.ability1, poke.ability2, poke.ability3).filterNot { _ == 0 }.distinct,
 		stats = PokeStat.values.map { s => s -> s.of(poke) }.toMap,
-		evos = Pair(poke.evolutionsFrom, poke.evolutionsTo).map { _.asScala.toVector.map(EvoState.from) },
-		megaEvos = Pair(poke.megaEvolutionsFrom, poke.megaEvolutionsTo).map { _.asScala.toVector },
+		evos = Pair(poke.evolutionsTo, poke.evolutionsFrom).map { _.asScala.toVector.map(EvoState.from) },
+		megaEvos = Pair(poke.megaEvolutionsTo, poke.megaEvolutionsFrom).map { _.asScala.toVector },
 		moves = Option(rom.getMovesLearnt.get(poke.number)) match {
 			case Some(moves) => moves.asScala.map(MoveLearn.from).toVector.sortBy { _.level }
 			case None => Vector()
@@ -27,7 +28,7 @@ object PokeState
  * @param evos Evolutions of this poke. First the 'from' evos (i.e. from previous forms)
  *             and second the 'to' evos (i.e. next forms)
  */
-case class PokeState(types: TypeSet, stats: Map[PokeStat, Int], evos: Pair[Vector[EvoState]],
+case class PokeState(types: TypeSet, abilities: Vector[Int], stats: Map[PokeStat, Int], evos: Pair[Vector[EvoState]],
                      megaEvos: Pair[Vector[MegaEvolution]], moves: Vector[MoveLearn])
 	extends PokeLike[EvoState]
 {

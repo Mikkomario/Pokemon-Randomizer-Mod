@@ -207,7 +207,9 @@ public class Randomizer {
 
         // Abilities
         if (settings.getAbilitiesMod() == Settings.AbilitiesMod.RANDOMIZE) {
-            romHandler.randomizeAbilities(settings);
+            context.randomizeAbilities();
+            // NB: Replaced with a custom implementation
+            // romHandler.randomizeAbilities(settings);
             pokemonTraitsChanged = true;
         }
 
@@ -442,7 +444,6 @@ public class Randomizer {
         // 2. Set trainers to be double battles and add extra Pokemon if necessary
         // TODO: Review
         // 3. Randomize Trainer Pokemon
-        // TODO: Customize
         // 4. Modify rivals to carry starters
         // 5. Force Trainer Pokemon to be fully evolved
 
@@ -477,7 +478,6 @@ public class Randomizer {
             trainersChanged = true;
         }
 
-
         if (settings.isDoubleBattleMode()) {
             romHandler.doubleBattleMode();
             trainersChanged = true;
@@ -489,7 +489,9 @@ public class Randomizer {
             case MAINPLAYTHROUGH:
             case TYPE_THEMED:
             case TYPE_THEMED_ELITE4_GYMS:
-                romHandler.randomizeTrainerPokes(settings);
+                // NB: Custom implementation
+                context.randomizeTrainerPokes();
+                // romHandler.randomizeTrainerPokes(settings);
                 trainersChanged = true;
                 break;
             default:
@@ -507,10 +509,13 @@ public class Randomizer {
             trainersChanged = true;
         }
 
+        // NB: Already implemented in the new randomization logic
+        /*
         if (settings.isTrainersForceFullyEvolved()) {
             romHandler.forceFullyEvolvedTrainerPokes(settings);
             trainersChanged = true;
         }
+        */
 
         if (settings.isBetterTrainerMovesets()) {
             romHandler.pickTrainerMovesets(settings);

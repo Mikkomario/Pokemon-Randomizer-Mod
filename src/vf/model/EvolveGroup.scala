@@ -92,6 +92,8 @@ case class EvolveGroup(forms: Vector[Poke], baseForm: Option[Poke] = None, megas
 	
 	// COMPUTED -------------------------
 	
+	def size = forms.size + megas.size
+	
 	def finalForm = forms.last
 	
 	def iterator = forms.iterator ++ megas.iterator
@@ -104,6 +106,8 @@ case class EvolveGroup(forms: Vector[Poke], baseForm: Option[Poke] = None, megas
 	def types = iterator.flatMap { _.types.types }.toSet
 	def primaryTypes = iterator.map { _.types.primary}.toSet
 	def secondaryTypes = iterator.flatMap { _.types.secondary }.toSet
+	
+	def canMegaEvolve = megas.nonEmpty
 	
 	
 	// OTHER    -------------------------

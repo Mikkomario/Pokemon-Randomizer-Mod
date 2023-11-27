@@ -1,8 +1,19 @@
 package vf.model
 
+import com.dabomstew.pkrandom.constants.{Abilities, GlobalConstants}
 import com.dabomstew.pkrandom.pokemon.MegaEvolution
 import utopia.flow.collection.immutable.Pair
+import vf.model.PokeLike.{badAbilities, negativeAbilities, wg}
 import vf.model.PokeStat.{Attack, SpecialAttack}
+
+import scala.jdk.CollectionConverters._
+
+object PokeLike
+{
+	private val negativeAbilities = GlobalConstants.negativeAbilities.iterator().asScala.toSet.map { a: Integer => a: Int }
+	private val badAbilities = GlobalConstants.badAbilities.iterator().asScala.toSet.map { a: Integer => a: Int }
+	private val wg = Abilities.wonderGuard
+}
 
 /**
  * Common trait for models that represent a poke (state)
@@ -14,6 +25,10 @@ trait PokeLike[+E <: EvoLike] extends EvoAccess[E]
 	// ABSTRACT ------------------------
 	
 	def types: TypeSet
+	/**
+	 * @return All (0-3) abilities of this poke. Abilities are represented with integers.
+	 */
+	def abilities: Vector[Int]
 	def stats: Map[PokeStat, Int]
 	def megaEvos: Pair[Vector[MegaEvolution]]
 	def moves: Vector[MoveLearn]
@@ -24,11 +39,37 @@ trait PokeLike[+E <: EvoLike] extends EvoAccess[E]
 	def primaryType = types.primary
 	def secondaryType = types.secondary
 	
-	// BST = base stat total
-	def bst = stats.valuesIterator.sum
+	def abilityPowerMod = {
+		val abil = abilities
+		if (abil.nonEmpty) {
+			val powerSum = abilities.map { ability =>
+				if (negativeAbilities.contains(ability))
+					0.6
+				else if (badAbilities.contains(ability))
+					0.9
+				else if (ability == wg)
+					2.0
+				else
+					1.0
+			}.sum
+			powerSum / abil.size
+		}
+		else
+			1.0
+	}
+	
+	/**
+	 * @return The base stat total of this poke. Includes an ability-specific modifier.
+	 */
+	def bst = stats.valuesIterator.sum * abilityPowerMod
 	def attackSpAttackRatio = apply(Attack) / apply(SpecialAttack).toDouble
 	
-	def megaForms(implicit pokes: Pokes) = megaEvos.second.map { evo => pokes(evo.to) }
+	def fromMegaEvos = megaEvos.first
+	def toMegaEvos = megaEvos.second
+	def isMega = fromMegaEvos.nonEmpty
+	def nonMega = !isMega
+	def megaForms(implicit pokes: Pokes) = toMegaEvos.map { evo => pokes(evo.to) }
+	def canMegaEvolveInTrainerBattle = toMegaEvos.exists { _.method == 1 }
 	
 	def evoMoves = moves.takeWhile { _.level == 0 }.map { _.move }
 	def startingMoves =

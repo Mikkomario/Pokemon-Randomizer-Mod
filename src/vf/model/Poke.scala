@@ -2,6 +2,7 @@ package vf.model
 
 import com.dabomstew.pkrandom.pokemon.{MegaEvolution, Pokemon}
 import com.dabomstew.pkrandom.romhandlers.RomHandler
+import utopia.flow.collection.CollectionExtensions._
 import utopia.flow.collection.immutable.Pair
 import utopia.flow.view.mutable.caching.ResettableLazy
 import vf.model.TypeSet.PokeType
@@ -40,17 +41,28 @@ class Poke(val wrapped: Pokemon, val cosmeticForms: Vector[Pokemon] = Vector())(
 	def number = wrapped.number
 	def name = wrapped.name
 	
+	def isLegendary = wrapped.isLegendary
+	def nonLegendary = !isLegendary
+	
+	def randomForm = forms.random
+	
+	/**
+	 * @return 1-based indices of the valid ability slots for this poke
+	 */
+	def abilitySlots = Vector(wrapped.ability1, wrapped.ability2, wrapped.ability3)
+		.view.zipWithIndex.filter { _._1 != 0 }.map { _._2 + 1 }.toVector
+	
 	/**
 	 * @return The current state of this poke's data
 	 */
 	def state = stateCache.value
 	
 	def primaryType_=(newType: PokeType) = {
-		wrapped.primaryType = newType
+		forms.foreach { _.primaryType = newType }
 		updateState()
 	}
 	def secondaryType_=(newType: PokeType) = {
-		wrapped.secondaryType = newType
+		forms.foreach { _.secondaryType = newType }
 		updateState()
 	}
 	
@@ -90,6 +102,7 @@ class Poke(val wrapped: Pokemon, val cosmeticForms: Vector[Pokemon] = Vector())(
 	// IMPLEMENTED  -------------------
 	
 	override def types: TypeSet = state.types
+	override def abilities: Vector[Int] = state.abilities
 	override def megaEvos: Pair[Vector[MegaEvolution]] = state.megaEvos
 	override def stats: Map[PokeStat, Int] = state.stats
 	override def moves: Vector[MoveLearn] = state.moves
@@ -99,8 +112,15 @@ class Poke(val wrapped: Pokemon, val cosmeticForms: Vector[Pokemon] = Vector())(
 	
 	def represents(poke: Pokemon) = wrapped == poke || cosmeticForms.contains(poke)
 	
+	def mapAbilities(mappings: Map[Int, Int]) = {
+		wrapped.ability1 = mappings.getOrElse(wrapped.ability1, wrapped.ability1)
+		wrapped.ability2 = mappings.getOrElse(wrapped.ability2, wrapped.ability2)
+		wrapped.ability3 = mappings.getOrElse(wrapped.ability3, wrapped.ability3)
+		updateState()
+	}
+	
 	def update(stat: PokeStat, value: Int) = {
-		stat.to(wrapped, value)
+		forms.foreach { p => stat.to(p, value) }
 		updateState()
 	}
 	// Swaps two stats with each other
@@ -112,12 +132,14 @@ class Poke(val wrapped: Pokemon, val cosmeticForms: Vector[Pokemon] = Vector())(
 	
 	// Makes the specified item appear as a held item (as commonly as possible)
 	def giveItem(item: Int) = {
-		if (wrapped.guaranteedHeldItem >= 0)
-			wrapped.guaranteedHeldItem = item
-		else if (wrapped.commonHeldItem >= 0)
-			wrapped.commonHeldItem = item
-		else if (wrapped.rareHeldItem >= 0)
-			wrapped.rareHeldItem = item
+		forms.foreach { p =>
+			if (p.guaranteedHeldItem >= 0)
+				p.guaranteedHeldItem = item
+			else if (p.commonHeldItem >= 0)
+				p.commonHeldItem = item
+			else if (p.rareHeldItem >= 0)
+				p.rareHeldItem = item
+		}
 	}
 	
 	def updateState() = stateCache.reset()

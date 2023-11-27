@@ -7,7 +7,7 @@ import utopia.flow.collection.immutable.Pair
 import utopia.flow.collection.immutable.range.{NumericSpan, Span}
 import utopia.flow.util.NotEmpty
 import vf.model.TypeRelation.{Relative, StrongRelative, WeakRelative}
-import vf.model.{EvolveGroup, Poke, TypeRelation, TypeRelations}
+import vf.model.{EvolveGroup, Poke, Pokes, TypeRelation, TypeRelations, WildEncounter}
 import vf.util.RandomUtils._
 
 import scala.collection.mutable
@@ -42,18 +42,21 @@ object RandomizeWildEncounters
 	
 	// Returns the poke-mapping and the lowest appearance levels of each poke-group
 	def all(evolveGroups: Iterable[EvolveGroup])
-	       (implicit rom: RomHandler, settings: Settings) =
+	       (implicit rom: RomHandler, settings: Settings, pokes: Pokes) =
 	{
+		val levelMod = 1.0 + settings.getWildLevelModifier / 100.0
 		val useTimeOfDay = settings.isUseTimeBasedEncounters
 		val originalEncounters = rom.collapsedEncounters(useTimeOfDay)
 		// TODO: Possibly make the original encounters less varied or shuffled
 		//  (National Dex possibly breaks trainer encounter randomization)
 		// Scans all zones, encounters and levels
 		val allEncounters = originalEncounters.iterator().asScala.flatMap { encounters =>
-			encounters.encounters.iterator().asScala.map { e => (encounters.offset, e, NumericSpan(e.level, e.maxLevel)) }
+			encounters.encounters.iterator().asScala.map { e => new WildEncounter(encounters.offset, e) }
 		}.toVector
-		// val zonesByPoke = allEncounters.groupMap { _._1 } { _._2 }.view.mapValues { _.toSet }.toMap
-		val pokeLevelRanges = allEncounters.groupMapReduce { _._2.pokemon.number } { _._3 } {
+		// Maps levels, if appropriate
+		if (levelMod != 1.0)
+			allEncounters.foreach { _.scaleLevelBy(levelMod) }
+		val pokeLevelRanges = allEncounters.groupMapReduce { _.poke.number } { _.levelRange } {
 			(a, b) => Span.numeric(a.start min b.start, a.end max b.end) }
 		val encounteredPokes = pokeLevelRanges.keySet
 		
@@ -99,30 +102,31 @@ object RandomizeWildEncounters
 		}.toMap
 		
 		// Distributes the zones between the random-matched forms, modifying the encounters in the process
-		val lowestAppearanceLevels = allEncounters.groupBy { _._2.pokemon.number }.iterator
+		val lowestAppearanceLevels = allEncounters.groupBy { _.poke.number }.iterator
 			// TODO: Move to a separate method and refactor
 			.flatMap { case (pokeNumber, encounters) =>
 				val matches = pokeMapping(pokeNumber)
-				val encountersByZone = encounters.groupMap { _._1 } { case (_, e, levels) => e -> levels }
+				val encountersByZone = encounters.groupBy { _.zone }
 				val minLevels: Vector[(EvolveGroup, Int)] = {
 					// Case: Less zones than variants to fit in => Assigns all variants to all available zones
 					if (encountersByZone.size < matches.size) {
 						encountersByZone.valuesIterator.flatMap { encounters =>
-							val naturalResults = encounters.map { case (encounter, levels) =>
-								val options = NotEmpty(matches.filter { _._2.forall { _ overlapsWith levels } })
-									.getOrElse(matches)
+							val naturalResults = encounters.map { encounter =>
+								val options =
+									NotEmpty(matches.filter { _._2.forall { _ overlapsWith encounter.levelRange } })
+										.getOrElse(matches)
 								val (selectedGroup, selectedPoke) = randomFrom(options)._1
-								encounter.pokemon = selectedPoke.wrapped
-								selectedGroup -> levels.start
+								encounter.poke = selectedPoke
+								selectedGroup -> encounter.minLevel
 							}
 							// Makes sure each appearance gets at least one encounter
 							// TODO: There's still a chance that all pokes won't appear (unlikely, however)
 							val forcedAdditions = matches
 								.filterNot { case ((group, _), _) => naturalResults.exists { _._1 == group } }
 								.map { case ((group, poke), _) =>
-									val encounter = randomFrom(encounters)._1
-									encounter.pokemon = poke.wrapped
-									group -> encounter.level
+									val encounter = randomFrom(encounters)
+									encounter.poke = poke
+									group -> encounter.minLevel
 								}
 							naturalResults ++ forcedAdditions
 						}.toVector
@@ -131,11 +135,11 @@ object RandomizeWildEncounters
 					else {
 						// Assigns the zones in leveled order between the forms
 						val zoneLevelRanges = encountersByZone.view.mapValues { encounters =>
-							val levels = encounters.map { case (_, levels) => levels }
+							val levels = encounters.map { _.levelRange }
 							Span(levels.iterator.map { _.start }.min, levels.iterator.map { _.end }.max)
 						}.toMap
 						val zoneAverageLevels = encountersByZone.view.mapValues { encounters =>
-							encounters.iterator.map { case (_, levels) => levels.ends.sum / 2 }.sum / encounters.size
+							encounters.iterator.map { _.levelRange.ends.sum / 2 }.sum / encounters.size
 						}.toMap
 						val naturalResults = encountersByZone.iterator.map { case (zoneId, encounters) =>
 							val avgLevel = zoneAverageLevels(zoneId)
@@ -144,14 +148,14 @@ object RandomizeWildEncounters
 								_._2.forall { _.contains(avgLevel) },
 								_._2.forall { _.contains(levelRange) })
 							val ((selectedGroup, selectedPoke), selectedLevelRange) = randomFrom(options)
-							encounters.foreach { case (encounter, levelRange) =>
+							encounters.foreach { encounter =>
 								val poke = {
 									if (selectedLevelRange.forall { _.contains(levelRange) })
 										selectedPoke
 									else
 										selectedGroup.formAtLevel(levelRange.start)
 								}
-								encounter.pokemon = poke.wrapped
+								encounter.poke = poke
 							}
 							selectedGroup -> levelRange.start
 						}.toVector
@@ -162,6 +166,9 @@ object RandomizeWildEncounters
 				minLevels.groupMapReduce { _._1 } { _._2 } { _ min _ }
 			}
 			.toVector.groupMapReduce { _._1 } { _._2 } { _ min _ }
+		
+		// Finalizes the change
+		allEncounters.foreach { _.setForme() }
 		
 		// Applies the change
 		rom.setEncounters(useTimeOfDay, originalEncounters)
@@ -238,13 +245,7 @@ object RandomizeWildEncounters
 				banned.addAll(getIrregularFormes());
 			}
 	 */
-	/*
-	for (Encounter enc : area.encounters) {
-						// Apply the map
-						enc.pokemon = areaMap.get(enc.pokemon);
-						setFormeForEncounter(enc, enc.pokemon);
-					}
-	 */
+	
 	// if (area.displayName.contains("Rock Smash"))
 	// area.displayName.contains("Old Rod") || area.displayName.contains("Good Rod") || area.displayName.contains("Super Rod")
 	// area.displayName.contains("Grass/Cave") || area.displayName.contains("Long Grass") || area.displayName.contains("Horde")
