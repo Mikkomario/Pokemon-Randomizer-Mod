@@ -31,6 +31,8 @@ class Evo(wrapped: Evolution) extends EvoLike
 	override def evoType: EvolutionType = state.evoType
 	override def extraInfo: Int = state.extraInfo
 	
+	override def toString = s"${wrapped.from.name} => ${wrapped.to.name}"
+	
 	
 	// OTHER    ------------------------
 	

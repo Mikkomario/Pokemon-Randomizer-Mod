@@ -6,10 +6,12 @@ import com.dabomstew.pkrandom.{RandomSource, Settings}
 import utopia.flow.collection.CollectionExtensions._
 import utopia.flow.collection.immutable.Pair
 import utopia.flow.collection.immutable.range.{HasInclusiveOrderedEnds, Span}
+import vf.model.PokeStat.{Attack, SpecialAttack}
 import vf.model.TypeRelation.{Relative, StrongRelative, Unrelated, WeakRelative}
 import vf.model._
 import vf.util.RandomUtils._
 
+import java.io.PrintWriter
 import java.util
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -47,39 +49,41 @@ object RandomizeMoves
 	// OTHER    -------------------------
 	
 	// Randomizes moves for all pokemon
-	def all()(implicit rom: RomHandler, pokes: Pokes, moves: Moves, settings: Settings) =
-	{
-		// Stores moves in java data structures because of the rom interface
-		val originalMovesLearnt = rom.getMovesLearnt
-		val newMovesBuilder = new java.util.HashMap[Integer, java.util.List[MoveLearnt]]()
-		// Randomizes moves for all pokemon
-		originalMovesLearnt.keySet().iterator().asScala.foreach { pokeNum =>
-			val number: Int = pokeNum
-			pokes(number).foreach { poke =>
-				val moveListBuilder = new util.ArrayList[MoveLearnt]()
-				apply(poke).foreach { move => moveListBuilder.add(move.toMoveLearnt) }
-				newMovesBuilder.put(pokeNum, moveListBuilder)
+	def all()(implicit rom: RomHandler, pokes: Pokes, moves: Moves, settings: Settings) = {
+		Log("moves") { writer =>
+			// Stores moves in java data structures because of the rom interface
+			val originalMovesLearnt = rom.getMovesLearnt
+			val newMovesBuilder = new java.util.HashMap[Integer, java.util.List[MoveLearnt]]()
+			// Randomizes moves for all pokemon
+			originalMovesLearnt.keySet().iterator().asScala.foreach { pokeNum =>
+				val number: Int = pokeNum
+				pokes(number).foreach { poke =>
+					val moveListBuilder = new util.ArrayList[MoveLearnt]()
+					apply(poke, writer).foreach { move => moveListBuilder.add(move.toMoveLearnt) }
+					newMovesBuilder.put(pokeNum, moveListBuilder)
+				}
 			}
-		}
-		// Makes sure cosmetic forms have the same moves as their base forms
-		pokes.cosmeticForms.foreach { cosmeticPoke =>
-			if (originalMovesLearnt.containsKey(cosmeticPoke.number: Integer) &&
-				originalMovesLearnt.containsKey(cosmeticPoke.baseForme.number: Integer))
-			{
-				// TODO: Might want to copy the MoveLearnt instances, also
-				val copyList = new java.util.ArrayList(newMovesBuilder.get(cosmeticPoke.baseForme.number))
-				newMovesBuilder.put(cosmeticPoke.number, copyList)
+			// Makes sure cosmetic forms have the same moves as their base forms
+			pokes.cosmeticForms.foreach { cosmeticPoke =>
+				if (originalMovesLearnt.containsKey(cosmeticPoke.number: Integer) &&
+					originalMovesLearnt.containsKey(cosmeticPoke.baseForme.number: Integer)) {
+					// TODO: Might want to copy the MoveLearnt instances, also
+					val copyList = new java.util.ArrayList(newMovesBuilder.get(cosmeticPoke.baseForme.number))
+					newMovesBuilder.put(cosmeticPoke.number, copyList)
+				}
 			}
+			// Applies the new moves
+			rom.setMovesLearnt(newMovesBuilder)
+			pokes.foreach { _.updateState() }
 		}
-		// Applies the new moves
-		rom.setMovesLearnt(newMovesBuilder)
-		pokes.foreach { _.updateState() }
 	}
 	
 	// Returns new moves to assign (level -> move number)
-	private def apply(poke: Poke)
+	private def apply(poke: Poke, writer: PrintWriter)
 	                 (implicit moves: Moves, settings: Settings, rom: RomHandler): Vector[MoveLearn] =
 	{
+		writer.println(s"\nProcessing ${poke.name} (${poke.types} / ${
+			if (poke(Attack) > poke(SpecialAttack)) "physical" else "special" })\t----------------")
 		val typeConversions = poke.typeSwaps
 		val currentRelations = poke.types.relations
 		// Whether attack and special attack have been so modified that moves need to be altered
@@ -102,7 +106,9 @@ object RandomizeMoves
 						currentRelations.random(typeWeights)
 				}
 			val category = randomCategoryIn(moveType, poke.attackSpAttackRatio)
-			randomMove(pickedMovesBuilder, moveType, category)
+			val move = randomMove(pickedMovesBuilder, moveType, category)
+			writer.println(s"New move: ${moves.byNumber(move).name}")
+			move
 		}
 		// Finds a relative random move
 		def swapMove(original: Move) = {
@@ -138,7 +144,9 @@ object RandomizeMoves
 				else
 					None
 			}
-			randomMove(pickedMovesBuilder, moveType, moveCategory, powerRange)
+			val move = randomMove(pickedMovesBuilder, moveType, moveCategory, powerRange)
+			writer.println(s"Swaps ${original.name} to ${moves.byNumber(move).name}")
+			move
 		}
 		// Preserves the previously selected move, if possible
 		def keepMove(original: Move) = {
@@ -200,7 +208,10 @@ object RandomizeMoves
 		// Non-power moves are placed randomly
 		val newMovesBuffer = mutable.Buffer.from(newDamagingMoves.sortBy { m => m.power * m.hitCount * m.hitratio })
 		newNonDamagingMoves.foreach { move =>
-			newMovesBuffer.insert(RandomSource.nextInt(newMovesBuffer.size), move)
+			if (newMovesBuffer.isEmpty)
+				newMovesBuffer.append(move)
+			else
+				newMovesBuffer.insert(RandomSource.nextInt(newMovesBuffer.size), move)
 		}
 		
 		// Returns the combined move-list
@@ -243,7 +254,7 @@ object RandomizeMoves
 			case None =>
 				category match {
 					case Some(c) => moves.byCategory(c)
-					case None => moves.all
+					case None => moves.valid
 				}
 		}
 		// Filters out already selected moves

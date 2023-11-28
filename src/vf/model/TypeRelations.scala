@@ -52,7 +52,7 @@ object TypeRelations
 		(Type.DRAGON, WeakRelative, Type.WATER),
 		(Type.DRAGON, WeakRelative, Type.ICE),
 		(Type.WATER, StrongRelative, Type.ICE),
-		(Type.WATER, Relative, Type.FLYING),
+		(Type.WATER, WeakRelative, Type.FLYING),
 		(Type.ICE, WeakRelative, Type.FLYING),
 		(Type.POISON, StrongRelative, Type.GRASS),
 		(Type.POISON, Relative, Type.BUG),
@@ -168,6 +168,14 @@ case class TypeRelations(origin: TypeSet, relatives: Map[TypeRelation, Iterable[
 			randomFrom(relatives(category).toSeq)
 		}
 	}
+	
+	
+	// IMPLEMENTED  -----------------
+	
+	override def toString = s"Relations of $origin are ${
+		relatives.toVector.reverseSortBy { _._1 }.map { case (relation, types) =>
+			s"$relation: [${ types.toVector.map { _.toString }.sorted.mkString(", ") }]"
+		}.mkString(", ") }"
 	
 	
 	// OTHER    ---------------------

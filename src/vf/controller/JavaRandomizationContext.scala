@@ -21,6 +21,18 @@ class JavaRandomizationContext(implicit romHandler: RomHandler, settings: Settin
 	private var minAppearanceLevels = Map[EvolveGroup, Int]().withDefaultValue(1)
 	
 	
+	// INITIAL CODE ---------------------
+	
+	Log("evolve-groups") { writer =>
+		evolveGroups.toVector.sortBy { _.forms.head.number }.foreach { group =>
+			writer.println(s"$group ${group.types.mkString("|")}:")
+			group.iterator.foreach { poke =>
+				writer.println(s"\t- ${poke.name}")
+			}
+		}
+	}
+	
+	
 	// OTHER    ------------------------
 	
 	def randomizeTypes() = {
@@ -36,5 +48,7 @@ class JavaRandomizationContext(implicit romHandler: RomHandler, settings: Settin
 		pokeMapping = mapping
 		minAppearanceLevels = appearance
 	}
-	def randomizeTrainerPokes() = RandomizeBattles.all(pokeMapping, minAppearanceLevels)
+	def randomizeTrainerPokes() =
+		RandomizeBattles.all(evolveGroups.flatMap { g => g.iterator.map { _.number -> g } }.toMap,
+			pokeMapping, minAppearanceLevels)
 }

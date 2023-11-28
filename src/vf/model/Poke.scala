@@ -21,7 +21,7 @@ class Poke(val wrapped: Pokemon, val cosmeticForms: Vector[Pokemon] = Vector())(
 	// ATTRIBUTES   -------------------
 	
 	override lazy val evos: Pair[Vector[Evo]] =
-		Pair(forms.flatMap { _.evolutionsFrom.asScala }, forms.flatMap { _.evolutionsTo.asScala })
+		Pair(forms.flatMap { _.evolutionsTo.asScala }, forms.flatMap { _.evolutionsFrom.asScala })
 			.map { _.distinct.map { new Evo(_) } }
 	
 	/**

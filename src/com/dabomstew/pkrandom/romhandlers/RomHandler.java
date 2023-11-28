@@ -51,7 +51,7 @@ public interface RomHandler {
     // Functions added in order to enable customization outside this RomHandler
 
     // For ORAS and others where randomization would break encounters, returns modified encounter-sets
-    public List<EncounterSet> collapsedEncounters(boolean useTimeOfDay);
+    public List<EncounterSet> collapsedEncounters(List<EncounterSet> encounters);
 
 
     // =======================

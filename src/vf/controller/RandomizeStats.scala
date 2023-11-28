@@ -7,6 +7,8 @@ import utopia.flow.collection.immutable.Pair
 import vf.model.PokeStat.Hp
 import vf.model.{EvolveGroup, PokeStat}
 
+import java.io.PrintWriter
+
 /**
  * Implementation for stats-randomization
  * @author Mikko Hilpinen
@@ -18,7 +20,8 @@ object RandomizeStats
 	
 	private val randomizeStatChainChance = 0.7
 	private val randomizeMoreChainChance = 0.7
-	private val randomizeAmount = 0.1
+	private val randomizeDecrease = 0.1
+	private val randomizeIncrease = 0.15
 	
 	private val shuffleStatChainChance = 0.7
 	
@@ -26,31 +29,43 @@ object RandomizeStats
 	// OTHER    ------------------------------
 	
 	// Returns modifications made
-	def all()(implicit groups: IterableOnce[EvolveGroup]) = {
-		val (modifiers, swaps) = groups.iterator.splitFlatMap(apply)
-		modifiers.toMap -> swaps.toMap
+	def all()(implicit groups: Iterable[EvolveGroup]) = {
+		Log("stats") { writer =>
+			val (modifiers, swaps) = groups.splitFlatMap { apply(_, writer) }
+			// Logs the results, where changed
+			writer.println("\n\n-----------")
+			groups.foreach { group =>
+				val poke = group.finalForm
+				if (poke.originalState.stats != poke.stats) {
+					writer.println(s"${poke.name}: ${ poke.originalState.bst } => ${ poke.bst } BST")
+					PokeStat.values.foreach { stat =>
+						writer.println(s"\t- $stat: ${ poke.originalState(stat) } => ${ poke(stat) }")
+					}
+				}
+			}
+			modifiers.toMap -> swaps.toMap
+		}
 	}
 	
 	// Uniformly randomizes for the whole evolve-group
-	def apply(group: EvolveGroup) = {
-		// Movies n stats by n%
+	def apply(group: EvolveGroup, writer: PrintWriter) = {
+		writer.println(s"\nProcessing $group\t----------------")
+		// Modifies n stats by n%
 		val modifiers = Iterator
 			.continually {
-				val modifierIter = {
-					// Increase
-					if (RandomSource.nextBoolean())
-						Iterator.iterate(1 + randomizeAmount) { math.pow(_, 2) }
-					// Decrease
-					else
-						Iterator.iterate(1 - randomizeAmount) { math.pow(_, 2) }
-				}
 				// Randomizes a random amount (using chaining)
-				var modifier = modifierIter.next()
+				var impact = 1
 				while (RandomSource.nextDouble() < randomizeMoreChainChance) {
-					modifier = modifierIter.next()
+					impact += 1
+				}
+				val mod = {
+					if (RandomSource.nextBoolean())
+						math.pow(1 + randomizeIncrease, impact)
+					else
+						math.pow(1 - randomizeDecrease, impact)
 				}
 				// Randomizes a random stat
-				PokeStat.random -> modifier
+				PokeStat.random -> mod
 			}
 			// Randomizes a random number of stats
 			.takeWhile { _ => RandomSource.nextDouble() < randomizeStatChainChance }
@@ -58,6 +73,10 @@ object RandomizeStats
 			// If a stat was randomized multiple times, combines the effects
 			.groupMapReduce { _._1 } { _._2 } { _ * _ }
 			.withDefaultValue(1.0)
+		if (modifiers.nonEmpty) {
+			writer.println(s"Modifies ${modifiers.size} stats:")
+			modifiers.foreach { case (stat, mod) => writer.println(s"\t- $stat = ${(mod * 100).round}%") }
+		}
 		// Swaps stats around randomly (chaining)
 		val statAssignments = {
 			val defaultSwaps = Iterator
@@ -81,6 +100,10 @@ object RandomizeStats
 				defaultSwaps.filterNot { case (to, from) => Pair(to, from).contains(Hp) }
 			else
 				defaultSwaps
+		}
+		if (statAssignments.nonEmpty) {
+			writer.println(s"Performs ${statAssignments.size} stat swaps")
+			statAssignments.foreach { case (from, to) => writer.println(s"\t- $from => $to") }
 		}
 		
 		// Applies the shuffles and the modifiers to all pokemon in this group

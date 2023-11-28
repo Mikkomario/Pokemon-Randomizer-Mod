@@ -44,7 +44,7 @@ trait PokeLike[+E <: EvoLike] extends EvoAccess[E]
 		if (abil.nonEmpty) {
 			val powerSum = abilities.map { ability =>
 				if (negativeAbilities.contains(ability))
-					0.6
+					0.65
 				else if (badAbilities.contains(ability))
 					0.9
 				else if (ability == wg)
@@ -76,6 +76,11 @@ trait PokeLike[+E <: EvoLike] extends EvoAccess[E]
 		moves.view.dropWhile { _.level == 0 }.takeWhile { _.level == 1 }.map { _.move }.toVector
 	
 	def normalMoves = moves.dropWhile { _.level <= 1 }
+	
+	
+	// IMPLEMENTED  ------------------
+	
+	override def isBasicForm = super.isBasicForm && nonMega
 	
 	
 	// OTHER    ----------------------

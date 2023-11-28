@@ -11,6 +11,7 @@ import vf.model.TypeRelation.{Relative, StrongRelative, Unrelated, WeakRelative}
 import vf.model._
 import vf.util.RandomUtils._
 
+import java.io.PrintWriter
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.Random
@@ -26,9 +27,11 @@ object RandomizeBattles
 	
 	private val bstRange = Span.numeric(0.85, 1.25)
 	
-	private val minStrictTypeRelation: TypeRelation = Relative
+	private val defaultMinTypeRelation: TypeRelation = WeakRelative
+	private val minStrictTypeRelation: TypeRelation = StrongRelative
 	
 	private val bstDiffWeightMod = 0.5
+	private val sameTypeWeight = 11.0
 	private val typeWeights = Map[TypeRelation, Double](
 		StrongRelative -> 8.0, Relative -> 6.0, WeakRelative -> 3.0, Unrelated -> 1.5
 	)
@@ -36,20 +39,24 @@ object RandomizeBattles
 	
 	// OTHER    --------------------------
 	
-	def all(pokeMapping: Map[Int, Vector[EvolveGroup]], minAppearanceLevels: Map[EvolveGroup, Int])
-	       (implicit rom: RomHandler, pokes: Pokes, settings: Settings) =
+	def all(allGroups: Map[Int, EvolveGroup], pokeMapping: Map[Int, Vector[EvolveGroup]],
+	        minAppearanceLevels: Map[EvolveGroup, Int])
+	       (implicit rom: RomHandler, settings: Settings) =
 	{
 		val levelMod = 1 + settings.getTrainersLevelModifier / 100.0
 		// Indices poke groups by poke number. Only includes poke groups that appear in the 'minAppearanceLevels'
 		// (i.e. the wild)
 		val pokePool = minAppearanceLevels.keySet
-		val groupByNumber = pokePool.flatMap { g => g.iterator.map { _.number -> g } }.toMap
 		val trainers = rom.getTrainers
-		trainers.iterator().asScala
-			// This is the first rival in Yellow. His Pokemon is used to determine the non-player
-			// starter, so we can't change it here. Just skip it.
-			.filterNot { t => Option(t.tag).contains("IRIVAL") }
-			.foreach { trainer => apply(trainer, levelMod, pokeMapping, pokePool, groupByNumber, minAppearanceLevels) }
+		Log("trainers") { writer =>
+			writer.println(s"Applied level mod is $levelMod")
+			trainers.iterator().asScala
+				// This is the first rival in Yellow. His Pokemon is used to determine the non-player
+				// starter, so we can't change it here. Just skip it.
+				.filterNot { t => Option(t.tag).contains("IRIVAL") }
+				.foreach { trainer => apply(trainer, levelMod, pokeMapping, pokePool, allGroups,
+					minAppearanceLevels, writer) }
+		}
 		// TODO: Is double battle mode correct?
 		// Saves the changes to the ROM
 		rom.setTrainers(trainers, false)
@@ -58,9 +65,10 @@ object RandomizeBattles
 	// TODO: Current implementation is missing rival starter handling. See if that needs to be added separately.
 	def apply(trainer: Trainer, levelMod: Double,
 	          pokeMapping: Map[Int, Vector[EvolveGroup]], pokePool: Iterable[EvolveGroup], groups: Map[Int, EvolveGroup],
-	          minAppearanceLevels: Map[EvolveGroup, Int])
-	         (implicit rom: RomHandler, pokes: Pokes, settings: Settings) =
+	          minAppearanceLevels: Map[EvolveGroup, Int], writer: PrintWriter)
+	         (implicit rom: RomHandler, settings: Settings) =
 	{
+		writer.println(s"\n${trainer.name}/${trainer.tag}")
 		// Gym trainers, elite four, champion and others use stricter type-matching
 		lazy val useStrictTyping = Option(trainer.tag).exists { group =>
 			group.startsWith("GYM") || group.startsWith("ELITE") || group.startsWith("CHAMPION") ||
@@ -96,13 +104,20 @@ object RandomizeBattles
 				}
 				// Case: No mapping result available => Selects randomly from the pool
 				else
-					findMatchFor(pokes(tp.pokemon), originalGroup, level, pokePool, selectedGroups, minAppearanceLevels,
-						useStrictTyping, requireMegaEvolvable)
+					findMatchFor(originalGroup, level, pokePool, selectedGroups,
+						minAppearanceLevels, writer, useStrictTyping, requireMegaEvolvable)
 			}
 			selectedGroups += selectedGroup
 			
 			// Assigns the selected poke
 			// TODO: Apply random form
+			
+			// Logs
+			val originalPoke = originalGroup.formAtLevel(tp.level)
+			writer.println(s"\t- ${ originalPoke.name } (${ originalPoke.originalState.types }) lvl ${ tp.level } (${
+				originalPoke.originalState.bst}) => ${
+				selectedPoke.name } (${ selectedPoke.types }) lvl $level (${ selectedPoke.bst })")
+			
 			tp.pokemon = selectedPoke.randomForm
 			tp.level = level
 			tp.abilitySlot = selectedPoke.abilitySlots.random
@@ -111,6 +126,7 @@ object RandomizeBattles
 			// Enables mega evolution for all pokes that support it
 			NotEmpty(selectedPoke.toMegaEvos.filter { _.method == 1 }).foreach { megaEvos =>
 				if (megaEvoFlag.set()) {
+					writer.println { "\t\t- Mega evolves" }
 					val megaEvo = megaEvos.random
 					tp.heldItem = megaEvo.argument
 				}
@@ -122,13 +138,17 @@ object RandomizeBattles
 		}
 	}
 	
-	private def findMatchFor(original: Poke, originalGroup: EvolveGroup, level: Int, pool: Iterable[EvolveGroup],
+	private def findMatchFor(originalGroup: EvolveGroup, level: Int, pool: Iterable[EvolveGroup],
 	                         used: mutable.Set[EvolveGroup], minAppearanceLevels: Map[EvolveGroup, Int],
+	                         writer: PrintWriter,
 	                         useStrictTyping: Boolean, requireMegaEvolvable: Boolean)
 	                        (implicit rom: RomHandler) =
 	{
+		// Makes sure the original poke is fully evolved in the original context in order to avoid strange mismatches
+		val original = originalGroup.formAtLevel(level)
+		
 		// Applies the following filters:
-		//      1) Min appearance level filter
+		//      1) Min appearance level filter - Will be looser for battles with < lvl 5 pokes
 		//      2) Non-duplicate filter
 		//      3) BST filter
 		//      4) Mega filter
@@ -136,22 +156,25 @@ object RandomizeBattles
 		lazy val allowedBst = bstRange.mapEnds { _ * originalBst }
 		lazy val originalType = original.originalState.types
 		lazy val typeRelations = TypeRelations.of(originalType)
+		lazy val minTypeRelation = if (useStrictTyping) minStrictTypeRelation else defaultMinTypeRelation
 		
 		val options = pool.flatMap { group =>
 			// 1, 2 & 4
 			if ((!requireMegaEvolvable || group.canMegaEvolve) &&
-				minAppearanceLevels.get(group).forall { _ <= level } && !used.contains(group))
+				minAppearanceLevels.get(group).forall { l => l <= level || l <= 5 } && !used.contains(group))
 			{
 				val form = group.formAtLevel(level)
-				val bstRatio = form.bstChange
+				val bst = form.bst
 				// 3
-				if (allowedBst.contains(bstRatio)) {
+				if (allowedBst.contains(bst)) {
 					// May apply type-filtering also
-					val typeRelation = typeRelations(form.types)
-					if (!useStrictTyping || typeRelation >= minStrictTypeRelation) {
+					val isSameType = originalType.types.exists { t => form.types.contains(t) }
+					lazy val typeRelation = typeRelations(form.types)
+					if (isSameType || typeRelation >= minTypeRelation) {
 						// Calculates a weight modifier based on BST and type
+						val bstRatio = bst / originalBst
 						val bstWeight = math.pow(1 - (1 - bstRatio).abs, bstDiffWeightMod)
-						val typeWeight = typeWeights.getOrElse(typeRelation, 1.0)
+						val typeWeight = if (isSameType) sameTypeWeight else typeWeights.getOrElse(typeRelation, 1.0)
 						Some((group, form) -> (bstWeight * typeWeight))
 					}
 					else
@@ -165,8 +188,34 @@ object RandomizeBattles
 		}
 		
 		// Selects a random poke from the options
-		if (options.isEmpty)
+		if (options.isEmpty) {
+			println(s"Warning: No options for $originalGroup/${
+				original.name} at lvl $level. Strict = $useStrictTyping, Mega = $requireMegaEvolvable")
+			
+			writer.println(s"No options for $originalGroup/${original.name} at lvl $level ($originalType $originalBst BST). Strict = $useStrictTyping, Mega = $requireMegaEvolvable")
+			writer.print(s"\t- Allowed BST range = $allowedBst")
+			writer.println(s"\t- $typeRelations")
+			pool.foreach { group =>
+				val megaAccepted = !requireMegaEvolvable || group.canMegaEvolve
+				val minLevel = minAppearanceLevels.get(group)
+				val minLevelAccepted = minLevel.forall { _ <= level }
+				val wasUsed = used.contains(group)
+				val form = group.formAtLevel(level)
+				val bst = form.bst
+				val bstAccepted = allowedBst.contains(bst)
+				val isSameType = originalType.types.exists { t => form.types.contains(t) }
+				val typeRelation = typeRelations(form.types)
+				val typeAccepted = isSameType || typeRelation >= minTypeRelation
+				writer.println(s"\t\t- $group => ${form.name} (${form.types} $bst BST)")
+				writer.println(s"\t\t\t- Can mega evolve = ${group.canMegaEvolve}; Mega condition accepted = $megaAccepted")
+				writer.println(s"\t\t\t- Min appearance level = $minLevel; Level accepted = $minLevelAccepted")
+				writer.println(s"\t\t\t- Was already used = $wasUsed")
+				writer.println(s"\t\t\t- BST accepted = $bstAccepted")
+				writer.println(s"\t\t\t- Same type = $isSameType; Type relation = $typeRelation; Type accepted = $typeAccepted")
+			}
+			
 			originalGroup -> original
+		}
 		else
 			weighedRandom(options)
 	}

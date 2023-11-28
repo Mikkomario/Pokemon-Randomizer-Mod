@@ -9,12 +9,12 @@ import scala.jdk.CollectionConverters._
 object Moves
 {
 	def inGame(rom: RomHandler) = Moves(
-		rom.getMoves.iterator().asScala.toSet,
-		rom.getGameBreakingMoves.iterator().asScala.map { i => i: Int }.toSet ++
-			rom.getHMMoves.iterator().asScala.map { i => i: Int } ++
-			rom.getMovesBannedFromLevelup.iterator().asScala.map { i => i: Int } ++
-			GlobalConstants.zMoves.iterator().asScala.map { i => i: Int } ++
-			rom.getIllegalMoves.iterator().asScala.map { i => i: Int }
+		rom.getMoves.iterator().asScala.flatMap { Option(_) }.toSet,
+		rom.getGameBreakingMoves.iterator().asScala.flatMap { Option[Int](_) }.toSet ++
+			rom.getHMMoves.iterator().asScala.flatMap { Option[Int](_) } ++
+			rom.getMovesBannedFromLevelup.iterator().asScala.flatMap { Option[Int](_) } ++
+			GlobalConstants.zMoves.iterator().asScala.flatMap { Option[Int](_) } ++
+			rom.getIllegalMoves.iterator().asScala.flatMap { Option[Int](_) }
 	)
 }
 
@@ -27,7 +27,7 @@ case class Moves(all: Set[Move], banned: Set[Int])
 {
 	lazy val valid = all.filterNot { m => banned.contains(m.number) }
 	
-	lazy val byNumber = valid.iterator.map { m => m.number -> m }.toMap
+	lazy val byNumber = all.iterator.map { m => m.number -> m }.toMap
 	
 	lazy val byType = valid.groupBy { _.`type` }.withDefaultValue(Set())
 	lazy val byHasStatChange = valid.groupBy { _.hasBeneficialStatChange }.withDefaultValue(Set())

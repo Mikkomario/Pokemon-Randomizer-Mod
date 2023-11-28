@@ -4,9 +4,11 @@ import com.dabomstew.pkrandom.RandomSource
 import com.dabomstew.pkrandom.pokemon.Type
 import com.dabomstew.pkrandom.romhandlers.RomHandler
 import utopia.flow.collection.CollectionExtensions._
+import utopia.flow.util.NotEmpty
 import vf.model.TypeRelation.{Relative, StrongRelative, Unrelated, WeakRelative}
 import vf.model.{EvolveGroup, TypeRelation, TypeRelations}
 
+import java.io.PrintWriter
 import scala.jdk.CollectionConverters._
 
 /**
@@ -33,9 +35,19 @@ object RandomizeTypes
 	
 	// OTHER    --------------------------
 	
-	def all()(implicit groups: IterableOnce[EvolveGroup], rom: RomHandler): (Map[Int, Map[Type, Type]], Map[Int, Type]) = {
-		val (conversions, additions) = groups.iterator.splitFlatMap(apply)
-		conversions.toMap -> additions.toMap
+	def all()(implicit groups: Iterable[EvolveGroup], rom: RomHandler): (Map[Int, Map[Type, Type]], Map[Int, Type]) = {
+		Log("types") { writer =>
+			val (conversions, additions) = groups.splitFlatMap { apply(_, writer) }
+			// Logs the changed types
+			writer.println("\n\n------------------")
+			groups.foreach { group =>
+				group.iterator.foreach { poke =>
+					if (poke.originalState.types != poke.types)
+						writer.println(s"${poke.name}: ${ poke.originalState.types } => ${ poke.types }")
+				}
+			}
+			conversions.toMap -> additions.toMap
+		}
 	}
 	
 	// Assigns correct types to cosmetic forms
@@ -49,11 +61,16 @@ object RandomizeTypes
 	// Returns
 	// 1) All type swaps (bound to pokemon number)
 	// 2) All type additions (bound to pokemon number)
-	def apply(group: EvolveGroup)(implicit rom: RomHandler): (Map[Int, Map[Type, Type]], Map[Int, Type]) = {
+	def apply(group: EvolveGroup, writer: PrintWriter)(implicit rom: RomHandler): (Map[Int, Map[Type, Type]], Map[Int, Type]) =
+	{
+		writer.println(s"\nProcessing $group\t-----------------")
+		writer.println(s"Original types: ${group.types.mkString(", ")}")
+		
 		// Case: Adds a secondary type
 		if (group.canAddSecondaryType && RandomSource.nextDouble() < addSecondaryChance) {
 			val baseType = group.finalForm.primaryType
 			val newType = TypeRelations.of(baseType).random(addSecondaryWeights)
+			writer.println(s"Adds secondary type: $newType")
 			
 			// May also alter the primary type(s) (lowered chance)
 			val primaryTypeChanges: Map[Int, Map[Type, Type]] = {
@@ -63,6 +80,8 @@ object RandomizeTypes
 						val target = (TypeRelations.of(original) - newType).random(changePrimaryWeights)
 						original -> target
 					}.toMap
+					writer.println(s"Also applies ${conversions.size} primary type conversions:")
+					conversions.foreach { case (from, to) => writer.println(s"\t- $from => $to") }
 					// Applies type conversions
 					group.iterator.flatMap { poke =>
 						val originalTypes = poke.types
@@ -107,6 +126,7 @@ object RandomizeTypes
 					case Some(original) =>
 						if (RandomSource.nextDouble() < changeSecondaryChance) {
 							val newType = TypeRelations.of(original).random(changeSecondaryWeights)
+							writer.println(s"Swaps the secondary mega type to $newType")
 							mega.secondaryType = newType
 							Some(Left(mega.number -> Map(original -> newType)))
 						}
@@ -132,6 +152,7 @@ object RandomizeTypes
 				original.secondary.flatMap { secondary =>
 					conversions.get(secondary).map { newType =>
 						poke.secondaryType = newType
+						writer.println(s"Waps secondary type of ${poke.name} from $secondary to $newType")
 						poke.number -> Map(secondary -> newType)
 					}
 				}
@@ -144,6 +165,8 @@ object RandomizeTypes
 					val primaryConversions = primaryTypes
 						.map { t => t -> (TypeRelations.of(t) -- newSecondaryTypes).random(changePrimaryWeights) }
 						.toMap
+					writer.println(s"Also changes ${primaryConversions.size} primary types:")
+					primaryConversions.foreach { case (from, to) => writer.println(s"\t- $from => $to") }
 					applyPrimaryConversions(group, primaryConversions).mergeWith(secondaryTypeSwaps) { _ ++ _ }
 				}
 				else
@@ -157,6 +180,8 @@ object RandomizeTypes
 			val conversions = group.primaryTypes
 				.map { t => t -> (TypeRelations.of(t) -- secondaryTypes).random(changePrimaryWeights) }
 				.toMap
+			writer.println(s"Swaps ${conversions.size} primary types:")
+			conversions.foreach { case (from, to) => writer.println(s"\t- $from => $to") }
 			applyPrimaryConversions(group, conversions) -> Map()
 		}
 		// Case: No change to types

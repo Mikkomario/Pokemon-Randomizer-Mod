@@ -38,6 +38,14 @@ case class TypeSet(primary: Type, secondary: Option[Type] = None)
 	def relations(implicit rom: RomHandler) = TypeRelations.of(this)
 	
 	
+	// IMPLEMENTED  -----------------
+	
+	override def toString = secondary match {
+		case Some(secondary) => s"$primary|$secondary"
+		case None => primary.toString
+	}
+	
+	
 	// OTHER    ---------------------
 	
 	def contains(t: Type) = primary == t || secondary.contains(t)

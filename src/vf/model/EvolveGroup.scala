@@ -110,6 +110,22 @@ case class EvolveGroup(forms: Vector[Poke], baseForm: Option[Poke] = None, megas
 	def canMegaEvolve = megas.nonEmpty
 	
 	
+	// IMPLEMENTED  ---------------------
+	
+	override def toString = {
+		val formsStr = forms.oneOrMany match {
+			case Left(only) => only.name
+			case Right(forms) => s"${forms.head.name}-${forms.last.name}"
+		}
+		val baseStr = baseForm match {
+			case Some(base) => s" (from ${base.name})"
+			case None => ""
+		}
+		val megaStr = if (megas.nonEmpty) " + megas" else ""
+		s"$formsStr$megaStr$baseStr"
+	}
+	
+	
 	// OTHER    -------------------------
 	
 	def formAtLevel(level: Int) = {

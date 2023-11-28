@@ -887,11 +887,11 @@ public abstract class AbstractRomHandler implements RomHandler {
 
     // NB: Added
     @Override
-    public List<EncounterSet> collapsedEncounters(boolean useTimeOfDay) {
+    public List<EncounterSet> collapsedEncounters(List<EncounterSet> encounters) {
         if (isORAS)
-            return collapseAreasORAS(getEncounters(useTimeOfDay));
+            return collapseAreasORAS(encounters);
         else
-            return getEncounters(useTimeOfDay);
+            return encounters;
     }
 
     @Override
