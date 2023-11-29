@@ -276,8 +276,9 @@ public class Randomizer {
                 startersChanged = true;
                 break;
             case RANDOM_WITH_TWO_EVOLUTIONS:
-                // TODO: Add stat-based filtering / matching as well
-                romHandler.randomizeBasicTwoEvosStarters(settings);
+                // NB: Custom implementation
+                context.randomizeStarters();
+                // romHandler.randomizeBasicTwoEvosStarters(settings);
                 startersChanged = true;
                 break;
             default:
@@ -299,6 +300,30 @@ public class Randomizer {
             log.println("Move Data: Unchanged." + NEWLINE);
         }
 
+        // NB: Moved from below (required for custom trainer randomization, as well as move randomization)
+        switch (settings.getWildPokemonMod()) {
+            case RANDOM:
+                romHandler.randomEncounters(settings);
+                wildsChanged = true;
+                break;
+            case AREA_MAPPING:
+                romHandler.area1to1Encounters(settings);
+                wildsChanged = true;
+                break;
+            case GLOBAL_MAPPING:
+                // NB: Replaced with a custom implementation
+                context.randomizeWildEncounters();
+                // romHandler.game1to1Encounters(settings);
+                wildsChanged = true;
+                break;
+            default:
+                if (settings.isWildLevelsModified()) {
+                    romHandler.onlyChangeWildLevels(settings);
+                    wildsChanged = true;
+                }
+                break;
+        }
+
         // Movesets
         // 1. Randomize movesets
         // 2. Reorder moves by damage
@@ -312,7 +337,8 @@ public class Randomizer {
             movesetsChanged = true;
         }
 
-        if (settings.isReorderDamagingMoves()) {
+        // NB: Already implemented in the custom move-randomization logic
+        if (settings.isReorderDamagingMoves() && settings.getMovesetsMod() == Settings.MovesetsMod.UNCHANGED) {
             romHandler.orderDamagingMovesByDamage();
             movesetsChanged = true;
         }
@@ -440,43 +466,19 @@ public class Randomizer {
 
         // Trainer Pokemon
         // 1. Add extra Trainer Pokemon
-        // TODO: Review
         // 2. Set trainers to be double battles and add extra Pokemon if necessary
         // TODO: Review
         // 3. Randomize Trainer Pokemon
         // 4. Modify rivals to carry starters
         // 5. Force Trainer Pokemon to be fully evolved
 
-        // NB: Moved from below (required for custom trainer randomization)
-        switch (settings.getWildPokemonMod()) {
-            case RANDOM:
-                romHandler.randomEncounters(settings);
-                wildsChanged = true;
-                break;
-            case AREA_MAPPING:
-                romHandler.area1to1Encounters(settings);
-                wildsChanged = true;
-                break;
-            case GLOBAL_MAPPING:
-                // NB: Replaced with a custom implementation
-                context.randomizeWildEncounters();
-                // romHandler.game1to1Encounters(settings);
-                wildsChanged = true;
-                break;
-            default:
-                if (settings.isWildLevelsModified()) {
-                    romHandler.onlyChangeWildLevels(settings);
-                    wildsChanged = true;
-                }
-                break;
-        }
-
+        /* NB: Replaced with the new RandomizeBattles implementation
         if (settings.getAdditionalRegularTrainerPokemon() > 0
                 || settings.getAdditionalImportantTrainerPokemon() > 0
                 || settings.getAdditionalBossTrainerPokemon() > 0) {
             romHandler.addTrainerPokemon(settings);
             trainersChanged = true;
-        }
+        }*/
 
         if (settings.isDoubleBattleMode()) {
             romHandler.doubleBattleMode();
@@ -490,8 +492,10 @@ public class Randomizer {
             case TYPE_THEMED:
             case TYPE_THEMED_ELITE4_GYMS:
                 // NB: Custom implementation
-                context.randomizeTrainerPokes();
-                // romHandler.randomizeTrainerPokes(settings);
+                if (settings.getWildPokemonMod() == Settings.WildPokemonMod.GLOBAL_MAPPING)
+                    context.randomizeTrainerPokes();
+                else
+                    romHandler.randomizeTrainerPokes(settings);
                 trainersChanged = true;
                 break;
             default:
@@ -502,20 +506,21 @@ public class Randomizer {
                 break;
         }
 
+        // RANDOM_WITH_TWO_EVOLUTIONS
         if ((settings.getTrainersMod() != Settings.TrainersMod.UNCHANGED
                 || settings.getStartersMod() != Settings.StartersMod.UNCHANGED)
-                && settings.isRivalCarriesStarterThroughout()) {
+                && settings.isRivalCarriesStarterThroughout() &&
+                settings.getStartersMod() != Settings.StartersMod.RANDOM_WITH_TWO_EVOLUTIONS)
+        {
             romHandler.rivalCarriesStarter();
             trainersChanged = true;
         }
 
         // NB: Already implemented in the new randomization logic
-        /*
-        if (settings.isTrainersForceFullyEvolved()) {
+        if (settings.isTrainersForceFullyEvolved() && settings.getTrainersMod() == Settings.TrainersMod.UNCHANGED) {
             romHandler.forceFullyEvolvedTrainerPokes(settings);
             trainersChanged = true;
         }
-        */
 
         if (settings.isBetterTrainerMovesets()) {
             romHandler.pickTrainerMovesets(settings);
@@ -1095,6 +1100,7 @@ public class Randomizer {
 
         List<Pokemon> starters = romHandler.getPickedStarters();
         int i = 1;
+        // FIXME: NullPointer here
         for (Pokemon starter: starters) {
             log.println("Set starter " + i + " to " + starter.fullName());
             i++;

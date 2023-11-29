@@ -4,7 +4,6 @@ import com.dabomstew.pkrandom.RandomSource
 import com.dabomstew.pkrandom.pokemon.Type
 import com.dabomstew.pkrandom.romhandlers.RomHandler
 import utopia.flow.collection.CollectionExtensions._
-import utopia.flow.util.NotEmpty
 import vf.model.TypeRelation.{Relative, StrongRelative, Unrelated, WeakRelative}
 import vf.model.{EvolveGroup, TypeRelation, TypeRelations}
 
@@ -35,7 +34,7 @@ object RandomizeTypes
 	
 	// OTHER    --------------------------
 	
-	def all()(implicit groups: Iterable[EvolveGroup], rom: RomHandler): (Map[Int, Map[Type, Type]], Map[Int, Type]) = {
+	def all(groups: Iterable[EvolveGroup])(implicit rom: RomHandler): (Map[Int, Map[Type, Type]], Map[Int, Type]) = {
 		Log("types") { writer =>
 			val (conversions, additions) = groups.splitFlatMap { apply(_, writer) }
 			// Logs the changed types

@@ -35,6 +35,7 @@ case class TypeSet(primary: Type, secondary: Option[Type] = None)
 	def isSingleType = secondary.isEmpty
 	def isDualType = !isSingleType
 	
+	def effectiveness = EffectivenessRelations(this)
 	def relations(implicit rom: RomHandler) = TypeRelations.of(this)
 	
 	

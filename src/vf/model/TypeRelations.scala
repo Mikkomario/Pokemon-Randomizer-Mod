@@ -109,7 +109,8 @@ object TypeRelations
 					separate.merge { _ ++ _ }
 						.filterNot { t => t == types.primary || t == secondary }
 						.filterNot { t =>
-							strongerLevels.exists { strongerLevel =>
+							// Also removes the origin types themselves from these relations
+							types.contains(t) || strongerLevels.exists { strongerLevel =>
 								bothRelations.exists { _(strongerLevel).contains(t) }
 							}
 						}
@@ -131,7 +132,11 @@ object TypeRelations
 			.filter { t => rom.typeInGame(t) && !related.exists { _._2 == t } }.toVector
 		val relatedMap = relations.node(t).leavingEdges.iterator
 			// Removes all types that don't appear in the targeted game
-			.filter { e => rom.typeInGame(e.end.value) }
+			// Also removes the type itself
+			.filter { e =>
+				val relatedType = e.end.value
+				relatedType != t && rom.typeInGame(relatedType)
+			}
 			.map { e => e.value -> e.end.value }
 			.toVector.asMultiMap
 		(relatedMap + (Unrelated -> unrelated)).withDefaultValue(Vector())
@@ -153,19 +158,40 @@ case class TypeRelations(origin: TypeSet, relatives: Map[TypeRelation, Iterable[
 	
 	// COMPUTED ----------------------
 	
-	def random(weights: Map[TypeRelation, Double]) = {
+	def random(weights: Map[TypeRelation, Double], additionalWeights: Map[Type, Double] = Map()) = {
 		// Case: No type relations => Yields the original type
 		if (relatives.isEmpty)
 			origin.random
-		// Case: Type relations => Selects a random relation level and then a random type from that level
+		else if (weights.isEmpty) {
+			// Case: Other weights specified => Selects weighed random from relatives
+			if (additionalWeights.nonEmpty) {
+				val options = WeakRelative.andLarger
+					.flatMap { relation =>
+						relatives.getOrElse(relation, Vector.empty).map { t => t -> additionalWeights.getOrElse(t, 1.0) }
+					}
+					.toVector
+				if (options.exists { _._2 > 0 })
+					weighedRandom(options)
+				else
+					origin.random
+			}
+			// Case: No weights specified => Returns a random relative type
+			else
+				NotEmpty(WeakRelative.andLarger.flatMap { relatives.getOrElse(_, Vector.empty) }.toVector)
+					.getOrElse(origin.types).random
+		}
+		// Case: Type relations => Applies relation-level based weights to types and selects one randomly
 		else {
-			val categoryOptions = NotEmpty(
-				weights.flatMap { case (relation, weight) =>
-					relatives.get(relation).map { types => relation -> (weight * types.size) }
-				})
-				.getOrElse { relatives.view.mapValues { _.size.toDouble } }
-			val category = weighedRandom(categoryOptions)
-			randomFrom(relatives(category).toSeq)
+			val weighedTypes = weights
+				.flatMap { case (relation, relationWeight) =>
+					relatives.getOrElse(relation, Vector.empty)
+						.map { t => t -> (relationWeight * additionalWeights.getOrElse(t, 1.0)) }
+				}
+				.toVector
+			if (weighedTypes.exists { _._2 > 0 })
+				weighedRandom(weighedTypes)
+			else
+				origin.random
 		}
 	}
 	

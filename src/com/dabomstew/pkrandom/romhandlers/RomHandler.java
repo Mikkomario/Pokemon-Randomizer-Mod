@@ -120,6 +120,7 @@ public interface RomHandler {
 
     List<Pokemon> getStarters();
 
+    void setStartersList(List<Pokemon> starters);
     boolean setStarters(List<Pokemon> newStarters);
 
     boolean hasStarterAltFormes();

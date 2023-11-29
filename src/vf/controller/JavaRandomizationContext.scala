@@ -14,9 +14,12 @@ class JavaRandomizationContext(implicit romHandler: RomHandler, settings: Settin
 	// ATTRIBUTES   ---------------------
 	
 	private implicit val pokemons: Pokes = Pokes.all
-	private implicit val evolveGroups: Set[EvolveGroup] = EvolveGroup.all
 	private implicit val moves: Moves = Moves.inGame(romHandler)
 	
+	private val evolveGroups: Vector[EvolveGroup] = EvolveGroup.all
+	private val groupByNumber = evolveGroups.flatMap { g => g.iterator.map { _.number -> g } }.toMap
+	
+	private var starterMapping = Map[EvolveGroup, EvolveGroup]()
 	private var pokeMapping = Map[Int, Vector[EvolveGroup]]()
 	private var minAppearanceLevels = Map[EvolveGroup, Int]().withDefaultValue(1)
 	
@@ -24,7 +27,7 @@ class JavaRandomizationContext(implicit romHandler: RomHandler, settings: Settin
 	// INITIAL CODE ---------------------
 	
 	Log("evolve-groups") { writer =>
-		evolveGroups.toVector.sortBy { _.forms.head.number }.foreach { group =>
+		evolveGroups.sortBy { _.forms.head.number }.foreach { group =>
 			writer.println(s"$group ${group.types.mkString("|")}:")
 			group.iterator.foreach { poke =>
 				writer.println(s"\t- ${poke.name}")
@@ -36,19 +39,26 @@ class JavaRandomizationContext(implicit romHandler: RomHandler, settings: Settin
 	// OTHER    ------------------------
 	
 	def randomizeTypes() = {
-		RandomizeTypes.all()
+		RandomizeTypes.all(evolveGroups)
 		RandomizeTypes.fixCosmeticForms()
+		// Also applies type stat "compensation" in order to make the pokes more characteristic of the new type
+		ReflectTypeChangesInStats()
 	}
 	def randomizeAbilities() = RandomizeAbilities.all(evolveGroups)
-	def randomizeStats() = RandomizeStats.all()
+	def randomizeStats() = RandomizeStats.all(evolveGroups)
 	def makeEvolvesEasier() = MakeEvolvesEasier.all(evolveGroups)
-	def randomizeMoves() = RandomizeMoves.all()
+	def randomizeStarters() = starterMapping = RandomizeStarters(evolveGroups, groupByNumber)
 	def randomizeWildEncounters() = {
 		val (mapping, appearance) = RandomizeWildEncounters.all(evolveGroups)
 		pokeMapping = mapping
 		minAppearanceLevels = appearance
 	}
-	def randomizeTrainerPokes() =
-		RandomizeBattles.all(evolveGroups.flatMap { g => g.iterator.map { _.number -> g } }.toMap,
-			pokeMapping, minAppearanceLevels)
+	def randomizeMoves() = RandomizeMoves.all(evolveGroups, minAppearanceLevels)
+	def randomizeTrainerPokes() = {
+		val encounterCounts = RandomizeBattles.all(groupByNumber, starterMapping, pokeMapping, minAppearanceLevels)
+		// Also balances pokes afterwards based on their types
+		val pokePool = minAppearanceLevels.keySet.flatMap { _.iterator } ++ encounterCounts.keySet ++
+			starterMapping.valuesIterator.flatMap { _.iterator }
+		CompensateForType(pokePool, encounterCounts)
+	}
 }

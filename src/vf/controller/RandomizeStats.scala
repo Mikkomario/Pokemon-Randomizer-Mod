@@ -29,7 +29,7 @@ object RandomizeStats
 	// OTHER    ------------------------------
 	
 	// Returns modifications made
-	def all()(implicit groups: Iterable[EvolveGroup]) = {
+	def all(groups: Iterable[EvolveGroup]) = {
 		Log("stats") { writer =>
 			val (modifiers, swaps) = groups.splitFlatMap { apply(_, writer) }
 			// Logs the results, where changed

@@ -1,9 +1,9 @@
 package vf.model
 
-import com.dabomstew.pkrandom.RandomSource
 import utopia.flow.collection.CollectionExtensions._
 import utopia.flow.collection.immutable.Pair
 import utopia.flow.collection.immutable.range.NumericSpan
+import utopia.flow.util.NotEmpty
 import vf.model.EvolveGroup.assumedFormLevelDuration
 
 object EvolveGroup
@@ -16,7 +16,7 @@ object EvolveGroup
 	// COMPUTED --------------------------
 	
 	def all(implicit pokes: Pokes) =
-		pokes.iterator.filter { _.isBasicForm }.flatMap(allStartingFrom).toSet
+		pokes.iterator.filter { _.isBasicForm }.flatMap(allStartingFrom).toVector
 	
 	
 	// OTHER    --------------------------
@@ -24,23 +24,19 @@ object EvolveGroup
 	def allStartingFrom(baseForm: Poke)(implicit pokes: Pokes): Iterable[EvolveGroup] = {
 		baseForm.toEvos.emptyOneOrMany match {
 			// Case: Evolves linearly => Recursively builds the group
-			case Some(Left(linear)) => allStartingFrom(linear.to).map { baseForm +: _ }
+			case Some(Left(linear)) => appendRoot(baseForm, linear, Vector.empty)
 			// Case: Splits => Forms one linear group and builds splitting branches from the rest
 			case Some(Right(splitting)) =>
 				val (splittingEvolves, linearEvolves) = splitting.divideBy { _.carriesStats }.toTuple
-				linearEvolves.headOption match {
-					// Case: Mixture of linear and splitting evolutions => Uses one linear evolution
-					case Some(linear) =>
-						allStartingFrom(linear.to).map { baseForm +: _ } ++
-							(linearEvolves.tail ++ splittingEvolves)
-								.flatMap { e => allStartingFrom(e.to).map { _.copy(baseForm = Some(baseForm)) } }
-					// Case: Only splitting evolutions => Converts one of them into a linear evolution
-					case None =>
-						val linearIndex = splitting.findIndexWhere { _.usesLevel }
-							.getOrElse { RandomSource.nextInt(splitting.size) }
-						allStartingFrom(splitting(linearIndex).to).map { baseForm +: _ } ++
-							splitting.withoutIndex(linearIndex)
-								.flatMap { e => allStartingFrom(e.to).map { _.copy(baseForm = Some(baseForm)) } }
+				// Case: Mixture of linear and splitting evolutions => Uses one linear evolution
+				if (linearEvolves.nonEmpty) {
+					val linear = linearEvolves.random
+					appendRoot(baseForm, linear, linearEvolves.filter { _ == linear } ++ splittingEvolves)
+				}
+				// Case: Only splitting evolutions => Converts one of them into a linear evolution
+				else {
+					val linear = NotEmpty(splitting.filter { _.usesLevel }).getOrElse(splitting).random
+					appendRoot(baseForm, linear, splitting.filterNot { _ == linear })
 				}
 			// Case: Doesn't evolve => Wraps in a group
 			case None => Some(singleForm(baseForm))
@@ -49,6 +45,17 @@ object EvolveGroup
 	
 	def singleForm(poke: Poke)(implicit pokes: Pokes) =
 		apply(Vector(poke), megas = Set.from(poke.megaForms))
+	
+	private def appendRoot(root: Poke, linear: Evo, others: Iterable[Evo])(implicit pokes: Pokes) = {
+		val processedOthers = others.flatMap { e => allStartingFrom(e.to).map { e =>
+			if (e.baseForm.isDefined) e else e.copy(baseForm = Some(root))
+		} }
+		val linearBranches = allStartingFrom(linear.to).toVector
+		if (linearBranches.isEmpty)
+			processedOthers
+		else
+			(root +: linearBranches.head) +: (linearBranches.tail ++ processedOthers)
+	}
 }
 
 /**
@@ -94,6 +101,7 @@ case class EvolveGroup(forms: Vector[Poke], baseForm: Option[Poke] = None, megas
 	
 	def size = forms.size + megas.size
 	
+	def firstForm = forms.head
 	def finalForm = forms.last
 	
 	def iterator = forms.iterator ++ megas.iterator

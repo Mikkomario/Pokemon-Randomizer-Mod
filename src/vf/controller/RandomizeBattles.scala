@@ -3,9 +3,10 @@ package vf.controller
 import com.dabomstew.pkrandom.pokemon.Trainer
 import com.dabomstew.pkrandom.romhandlers.RomHandler
 import com.dabomstew.pkrandom.{RandomSource, Settings}
-import utopia.flow.collection.immutable.range.Span
-import utopia.flow.util.NotEmpty
 import utopia.flow.collection.CollectionExtensions._
+import utopia.flow.collection.immutable.range.Span
+import utopia.flow.operator.Identity
+import utopia.flow.util.NotEmpty
 import utopia.flow.view.mutable.eventful.Flag
 import vf.model.TypeRelation.{Relative, StrongRelative, Unrelated, WeakRelative}
 import vf.model._
@@ -39,8 +40,8 @@ object RandomizeBattles
 	
 	// OTHER    --------------------------
 	
-	def all(allGroups: Map[Int, EvolveGroup], pokeMapping: Map[Int, Vector[EvolveGroup]],
-	        minAppearanceLevels: Map[EvolveGroup, Int])
+	def all(allGroups: Map[Int, EvolveGroup], starterMapping: Map[EvolveGroup, EvolveGroup],
+	        pokeMapping: Map[Int, Vector[EvolveGroup]], minAppearanceLevels: Map[EvolveGroup, Int])
 	       (implicit rom: RomHandler, settings: Settings) =
 	{
 		val levelMod = 1 + settings.getTrainersLevelModifier / 100.0
@@ -48,22 +49,37 @@ object RandomizeBattles
 		// (i.e. the wild)
 		val pokePool = minAppearanceLevels.keySet
 		val trainers = rom.getTrainers
-		Log("trainers") { writer =>
+		val encounterCounts = Log("trainers") { writer =>
 			writer.println(s"Applied level mod is $levelMod")
-			trainers.iterator().asScala
+			val encounterCounts = trainers.iterator().asScala
 				// This is the first rival in Yellow. His Pokemon is used to determine the non-player
 				// starter, so we can't change it here. Just skip it.
 				.filterNot { t => Option(t.tag).contains("IRIVAL") }
-				.foreach { trainer => apply(trainer, levelMod, pokeMapping, pokePool, allGroups,
-					minAppearanceLevels, writer) }
+				// In this process, collects the encountered pokes from every trainer
+				.flatMap { trainer =>
+					apply(trainer, levelMod, starterMapping, pokeMapping, pokePool, allGroups, minAppearanceLevels,
+						writer)
+				}
+				// Calculates the number of encounters for each poke
+				.toVector.groupMapReduce(Identity) { _ => 1 } { _ + _ }
+			
+			writer.println(s"\nTotal of ${encounterCounts.size} encountered pokes:")
+			encounterCounts.toVector.reverseSortBy { _._2 }.foreach { case (poke, encounters) =>
+				writer.println(s"\t- ${poke.name} (${poke.types} / ${poke.bst} BST): $encounters encounters")
+			}
+			
+			encounterCounts
 		}
 		// TODO: Is double battle mode correct?
 		// Saves the changes to the ROM
 		rom.setTrainers(trainers, false)
+		
+		// Returns the number of encounters per poke
+		encounterCounts
 	}
 	
-	// TODO: Current implementation is missing rival starter handling. See if that needs to be added separately.
-	def apply(trainer: Trainer, levelMod: Double,
+	// Returns the selected pokes
+	def apply(trainer: Trainer, levelMod: Double, starterMapping: Map[EvolveGroup, EvolveGroup],
 	          pokeMapping: Map[Int, Vector[EvolveGroup]], pokePool: Iterable[EvolveGroup], groups: Map[Int, EvolveGroup],
 	          minAppearanceLevels: Map[EvolveGroup, Int], writer: PrintWriter)
 	         (implicit rom: RomHandler, settings: Settings) =
@@ -85,27 +101,34 @@ object RandomizeBattles
 		val selectedGroups = mutable.Set[EvolveGroup]()
 		// Can only apply one mega evo per trainer
 		val megaEvoFlag = Flag()
-		Random.shuffle(trainer.pokemon.asScala).foreach { tp =>
+		// Each entry contains: 1) Selected evolve group, 2) Selected poke and 3) Encounter level
+		val selectedOpponents = Vector.from(Random.shuffle(trainer.pokemon.asScala).map { tp =>
 			val originalNumber = tp.pokemon.number
 			val originalGroup = groups(originalNumber)
 			val level = math.round(tp.level * levelMod).toInt
-			// If the original poke can mega-evolve, requires the resulting poke to be able to do that as well
-			val requireMegaEvolvable = tp.canMegaEvolve
-			// Looks for a mapping result first
-			// TODO: Apply stricter type-checking here also?
-			val mappingOptions = pokeMapping.getOrElse(originalNumber, Vector())
-				.filter { g => (!requireMegaEvolvable || g.canMegaEvolve) &&
-					minAppearanceLevels.get(g).forall { _ <= level } && !selectedGroups.contains(g) }
-			val (selectedGroup, selectedPoke) = {
-				// Case: Mapping result available => Selects one randomly
-				if (mappingOptions.nonEmpty) {
-					val group = randomFrom(mappingOptions)
-					group -> group.formAtLevel(level)
-				}
-				// Case: No mapping result available => Selects randomly from the pool
-				else
-					findMatchFor(originalGroup, level, pokePool, selectedGroups,
-						minAppearanceLevels, writer, useStrictTyping, requireMegaEvolvable)
+			val (selectedGroup, selectedPoke) = starterMapping.get(originalGroup) match {
+				// Case: Replacing a starter => Uses a pre-fixed mapping
+				case Some(newStarterGroup) => newStarterGroup -> newStarterGroup.formAtLevel(level)
+				// Case: Replacing a non-starter
+				case None =>
+					// If the original poke can mega-evolve, requires the resulting poke to be able to do that as well
+					val requireMegaEvolvable = tp.canMegaEvolve
+					// Looks for a mapping result first
+					// TODO: Apply stricter type-checking here also?
+					val mappingOptions = pokeMapping.getOrElse(originalNumber, Vector())
+						.filter { g =>
+							(!requireMegaEvolvable || g.canMegaEvolve) &&
+								minAppearanceLevels.get(g).forall { _ <= level } && !selectedGroups.contains(g)
+						}
+					// Case: Mapping result available => Selects one randomly
+					if (mappingOptions.nonEmpty) {
+						val group = randomFrom(mappingOptions)
+						group -> group.formAtLevel(level)
+					}
+					// Case: No mapping result available => Selects randomly from the pool
+					else
+						findMatchFor(originalGroup, level, pokePool, selectedGroups,
+							minAppearanceLevels, writer, useStrictTyping, requireMegaEvolvable)
 			}
 			selectedGroups += selectedGroup
 			
@@ -135,7 +158,59 @@ object RandomizeBattles
 			// Applies shiny chance (optional)
 			if (settings.isShinyChance && RandomSource.nextInt(256) == 0)
 				tp.IVs |= (1 << 30)
+			
+			// Returns selected group, selected poke and applied level
+			(selectedGroup, selectedPoke, level)
+		})
+		
+		// Adds additional trainer pokemon, if applicable (settings-based)
+		val defaultAdditionalPokeCount = {
+			if (trainer.isBoss)
+				settings.getAdditionalBossTrainerPokemon
+			else if (trainer.isImportant)
+				settings.getAdditionalImportantTrainerPokemon
+			else
+				settings.getAdditionalRegularTrainerPokemon
 		}
+		// If a trainer can appear in a Multi Battle (i.e., a Double Battle where the enemy consists
+		// of two independent trainers), we want to be aware of that so we don't give them a team of
+		// six Pokemon and have a 6v12 battle
+		val additionalPokeCount = {
+			val maxTotalCount = if (trainer.multiBattleStatus != Trainer.MultiBattleStatus.NEVER) 3 else 6
+			defaultAdditionalPokeCount min (maxTotalCount - selectedOpponents.size)
+		}
+		val trainerPokes = selectedOpponents.map { _._2 }
+		if (additionalPokeCount > 0) {
+			val (trainerPokeGroups, trainerPokeLevels) = selectedOpponents
+				.splitMap { case (group, _, level) => (group, level) }
+			val (additionalPokes, additionalPokeLevel) = selectAdditionalPokes(additionalPokeCount, trainerPokeGroups,
+				trainerPokeLevels, pokePool, selectedGroups, minAppearanceLevels, writer)
+			
+			// Logs
+			writer.println(s"Assigns $additionalPokeCount new pokes:")
+			additionalPokes.foreach { poke => writer.println(s"\t- ${poke.name} (${poke.types} ${poke.bst} BST)") }
+			
+			// We want to preserve the original last Pokemon because the order is sometimes used to
+			// determine the rival's starter
+			val secondToLastIndex = selectedOpponents.size - 1
+			val model = trainer.pokemon.get(0)
+			additionalPokes.foreach { poke =>
+				val tp = model.copy()
+				// WET WET
+				tp.pokemon = poke.randomForm
+				tp.level = additionalPokeLevel
+				tp.abilitySlot = poke.abilitySlots.random
+				tp.resetMoves = true
+				// Clear out the held item because we only want one Pokemon with a mega stone if we're
+				// swapping mega evolvables
+				tp.heldItem = 0
+				
+				trainer.pokemon.add(secondToLastIndex, tp)
+			}
+			
+			trainerPokes ++ additionalPokes
+		}
+		trainerPokes
 	}
 	
 	private def findMatchFor(originalGroup: EvolveGroup, level: Int, pool: Iterable[EvolveGroup],
@@ -218,6 +293,62 @@ object RandomizeBattles
 		}
 		else
 			weighedRandom(options)
+	}
+	
+	// WET WET - Needs refactoring with findMatch
+	// Assumes additionalPokeCount > 0
+	private def selectAdditionalPokes(additionalPokeCount: Int, originalGroups: Iterable[EvolveGroup],
+	                                levels: Iterable[Int], pool: Iterable[EvolveGroup], used: mutable.Set[EvolveGroup],
+	                                minAppearanceLevels: Map[EvolveGroup, Int], writer: PrintWriter)
+	                               (implicit rom: RomHandler) =
+	{
+		// Compares against the average BST and uses an average level
+		val level = (levels.sum.toDouble / levels.size).round.toInt
+		val referenceBst = originalGroups.map { _.formAtLevel(level).originalState.bst }.sum / originalGroups.size
+		// Checks whether there is a common type(s) between the original pokes
+		// If so, uses a poke that involves one of those types
+		val commonTypes = originalGroups.map { _.types }.reduce { _ & _ }
+		
+		// Applies the following filters:
+		//      1) Min appearance level filter - Will be looser for battles with < lvl 5 pokes
+		//      2) Non-duplicate filter
+		//      3) BST filter
+		//      4) Type filter, if applicable
+		lazy val allowedBst = bstRange.mapEnds { _ * referenceBst }
+		val options = pool.flatMap { group =>
+			// 1, 2
+			if (minAppearanceLevels.get(group).forall { l => l <= level || l <= 5 } && !used.contains(group)) {
+				val form = group.formAtLevel(level)
+				val bst = form.bst
+				// 3 & 4
+				if (allowedBst.contains(bst) && commonTypes.isEmpty || form.types.types.exists(commonTypes.contains)) {
+					// Calculates a weight modifier based on BST and type
+					val bstRatio = bst / referenceBst
+					val bstWeight = math.pow(1 - (1 - bstRatio).abs, bstDiffWeightMod)
+					Some(form -> bstWeight)
+				}
+				else
+					None
+			}
+			else
+				None
+		}
+		
+		// Selects a random poke from the options
+		if (options.hasSize <= additionalPokeCount) {
+			println(s"Warning: Only ${options.size} options for additional pokes at lvl $level. Common types = ${ commonTypes.mkString(", ") }")
+			options.map { _._1 } -> level
+		}
+		else if (additionalPokeCount == 1)
+			Vector(weighedRandom(options)) -> level
+		else {
+			val optionsBuffer = options.toBuffer
+			Iterator.continually {
+				val selected = weighedRandom(optionsBuffer)
+				optionsBuffer.remove(optionsBuffer.indexWhere { _._1.number == selected.number })
+				selected
+			}.take(additionalPokeCount).toVector -> level
+		}
 	}
 	
 	

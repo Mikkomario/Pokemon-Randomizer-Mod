@@ -15,7 +15,6 @@ import java.io.PrintWriter
 import java.util
 import scala.annotation.tailrec
 import scala.collection.mutable
-import scala.jdk.CollectionConverters._
 
 /**
  * Randomizes pokemon move-sets. Also adds new moves.
@@ -28,6 +27,7 @@ object RandomizeMoves
 	
 	// 0 = no extra moves, 1 = 100% extra moves, 2 = 200% extra moves, and so on...
 	private val extraMoveRatio = 1
+	private val minMovesCount = 12
 	
 	private val swapMoveChance = 0.4
 	private val sameTypeChance = 0.4
@@ -45,22 +45,36 @@ object RandomizeMoves
 	private val typeWeights = Map[TypeRelation, Double](
 		StrongRelative -> 6.0, Relative -> 4.5, WeakRelative -> 3.0, Unrelated -> 1.5)
 	
+	// Affects the chance to gain an advantage against otherwise superior type
+	private val defensiveBuffWeightMod = 0.4
+	// Affects the chance to gain an advantage against a type which the STAB types are not effective against
+	// Not combined with 'defensiveBuffWeightMod'
+	private val offensiveBuffWeightMod = 0.7
+	
 	
 	// OTHER    -------------------------
 	
 	// Randomizes moves for all pokemon
-	def all()(implicit rom: RomHandler, pokes: Pokes, moves: Moves, settings: Settings) = {
+	def all(groups: Iterable[EvolveGroup], minAppearanceLevels: Map[EvolveGroup, Int])
+	       (implicit rom: RomHandler, pokes: Pokes, moves: Moves, settings: Settings) =
+	{
 		Log("moves") { writer =>
 			// Stores moves in java data structures because of the rom interface
 			val originalMovesLearnt = rom.getMovesLearnt
 			val newMovesBuilder = new java.util.HashMap[Integer, java.util.List[MoveLearnt]]()
 			// Randomizes moves for all pokemon
-			originalMovesLearnt.keySet().iterator().asScala.foreach { pokeNum =>
-				val number: Int = pokeNum
-				pokes(number).foreach { poke =>
+			groups.foreach { group =>
+				val minAppearanceLevel = minAppearanceLevels.get(group)
+				group.levelThresholds.foreach { case (poke, evolveLevel) =>
+					// Takes a note of the first level at which this poke realistically appears
+					// Either after evolve or in the wild (if a randomized wild poke)
+					val firstLevel = minAppearanceLevel match {
+						case Some(minAppearanceLevel) => evolveLevel max minAppearanceLevel
+						case None => evolveLevel
+					}
 					val moveListBuilder = new util.ArrayList[MoveLearnt]()
-					apply(poke, writer).foreach { move => moveListBuilder.add(move.toMoveLearnt) }
-					newMovesBuilder.put(pokeNum, moveListBuilder)
+					apply(poke, firstLevel, writer).foreach { move => moveListBuilder.add(move.toMoveLearnt) }
+					newMovesBuilder.put(poke.number, moveListBuilder)
 				}
 			}
 			// Makes sure cosmetic forms have the same moves as their base forms
@@ -79,11 +93,40 @@ object RandomizeMoves
 	}
 	
 	// Returns new moves to assign (level -> move number)
-	private def apply(poke: Poke, writer: PrintWriter)
+	private def apply(poke: Poke, firstLevel: Int, writer: PrintWriter)
 	                 (implicit moves: Moves, settings: Settings, rom: RomHandler): Vector[MoveLearn] =
 	{
+		// Adds weight modifiers to types based on how they affect this poke's offensive and defensive capabilities
+		val typeEffectiveness = poke.types.effectiveness
+		val defensiveWeaknesses = typeEffectiveness.defensiveWeaknesses
+		val offensiveWeaknesses = typeEffectiveness.offensiveWeaknesses
+		val additionalTypeWeights = Type.values().iterator
+			.map { attackType =>
+				val attackEffectiveness = EffectivenessRelations(attackType)
+				val wouldImproveDefense = defensiveWeaknesses
+					.exists { attackerType => attackEffectiveness.offenseRatingAgainst(attackerType) > 0 }
+				val weight = {
+					if (wouldImproveDefense)
+						defensiveBuffWeightMod
+					else {
+						val wouldImproveOffense = offensiveWeaknesses
+							.exists { defenderType => attackEffectiveness.offenseRatingAgainst(defenderType) > 0 }
+						if (wouldImproveOffense)
+							offensiveBuffWeightMod
+						else
+							1.0
+					}
+				}
+				attackType -> weight
+			}
+			// Won't add a weight modifier to own types
+			.toMap -- poke.types.types
+		
 		writer.println(s"\nProcessing ${poke.name} (${poke.types} / ${
-			if (poke(Attack) > poke(SpecialAttack)) "physical" else "special" })\t----------------")
+			if (poke(Attack) > poke(SpecialAttack)) "Physical" else "Special" })\t----------------")
+		writer.println(s"\t- Applies the following type weight modifiers, in addition to type relations:")
+		additionalTypeWeights.filterNot { _._2 == 1.0 }.foreach { case (t, wt) => writer.println(s"\t\t- $t: $wt") }
+		
 		val typeConversions = poke.typeSwaps
 		val currentRelations = poke.types.relations
 		// Whether attack and special attack have been so modified that moves need to be altered
@@ -103,7 +146,7 @@ object RandomizeMoves
 					if (chance(ownTypeMoveChance))
 						poke.types.random
 					else
-						currentRelations.random(typeWeights)
+						currentRelations.random(typeWeights, additionalTypeWeights)
 				}
 			val category = randomCategoryIn(moveType, poke.attackSpAttackRatio)
 			val move = randomMove(pickedMovesBuilder, moveType, category)
@@ -124,7 +167,7 @@ object RandomizeMoves
 					poke.types.random
 				// Case: Other type (relative to the original move type)
 				else
-					TypeRelations.of(originalMoveType).random(typeWeights)
+					TypeRelations.of(originalMoveType).random(typeWeights, additionalTypeWeights)
 			}
 			val moveCategory = {
 				// Case: Move preserves category
@@ -214,11 +257,41 @@ object RandomizeMoves
 				newMovesBuffer.insert(RandomSource.nextInt(newMovesBuffer.size), move)
 		}
 		
-		// Returns the combined move-list
-		evoMoves.map(MoveLearn.evo) ++ startingMoves.map(MoveLearn.start) ++
+		// Combines the moves together and adds additional moves, if needed
+		val standardMoves = evoMoves.map(MoveLearn.evo) ++ startingMoves.map(MoveLearn.start) ++
 			(newDefaultMoves ++ newMoveLevels.iterator.zip(newMovesBuffer)
 				.map { case (level, move) => MoveLearn(level, move.number) })
-				.sortBy { _.level }
+		val finalMoves = {
+			val realisticMovesCount = standardMoves.count { _.level >= firstLevel }
+			// Case: Additional moves are not needed
+			if (realisticMovesCount >= minMovesCount) {
+				writer.println(s"=> $realisticMovesCount \"realistic\" moves")
+				standardMoves
+			}
+			// Case: New moves are needed => Generates as many as are needed
+			else {
+				writer.println(s"=> $realisticMovesCount \"realistic\" moves => Adds ${
+					minMovesCount - realisticMovesCount} new moves")
+				// Won't place any moves on levels where there are moves already
+				val usedLevels = mutable.Set[Int]()
+				standardMoves.foreach { usedLevels += _.level }
+				val newMovesIter = Iterator
+					.continually {
+						val move = newMove()
+						val level = Iterator
+							.continually { firstLevel + RandomSource.nextInt(100 - firstLevel) }
+							.filterNot(usedLevels.contains)
+							.next()
+						usedLevels += level
+						MoveLearn(level, move)
+					}
+					.take(minMovesCount - realisticMovesCount)
+				standardMoves ++ newMovesIter
+			}
+		}
+		
+		// Returns the combined move-list
+		finalMoves.sortBy { _.level }
 	}
 	
 	// Selects from physical vs. special based on stats

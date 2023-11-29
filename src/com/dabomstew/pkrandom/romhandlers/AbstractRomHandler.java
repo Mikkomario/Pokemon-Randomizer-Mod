@@ -3904,6 +3904,11 @@ public abstract class AbstractRomHandler implements RomHandler {
     }
 
     @Override
+    public void setStartersList(List<Pokemon> starters) {
+        pickedStarters = starters;
+    }
+
+    @Override
     public void customStarters(Settings settings) {
         boolean abilitiesUnchanged = settings.getAbilitiesMod() == Settings.AbilitiesMod.UNCHANGED;
         int[] customStarters = settings.getCustomStarters();
