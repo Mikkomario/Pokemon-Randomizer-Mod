@@ -5,7 +5,6 @@ import com.dabomstew.pkrandom.romhandlers.RomHandler
 import utopia.flow.collection.CollectionExtensions._
 import utopia.flow.collection.immutable.Pair
 import utopia.flow.view.mutable.caching.ResettableLazy
-import vf.model.TypeSet.PokeType
 
 import scala.jdk.CollectionConverters._
 import scala.language.implicitConversions
@@ -80,7 +79,7 @@ class Poke(val wrapped: Pokemon, val cosmeticForms: Vector[Pokemon] = Vector())(
 	 */
 	def addedType = if (originalState.types.isSingleType) secondaryType else None
 	
-	def bstChange = change.mapAndMerge { _.bst } { (original, current) => current / original.toDouble }
+	def bstChange = change.mapAndMerge { _.bst } { (original, current) => current / original }
 	/**
 	 * @return Amount of change occurred in attack to special attack -ratio during modifications.
 	 *         1.0 means no change. 2.0 means attack has relatively doubled.

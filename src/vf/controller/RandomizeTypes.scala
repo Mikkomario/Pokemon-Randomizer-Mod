@@ -1,11 +1,10 @@
 package vf.controller
 
 import com.dabomstew.pkrandom.RandomSource
-import com.dabomstew.pkrandom.pokemon.Type
 import com.dabomstew.pkrandom.romhandlers.RomHandler
 import utopia.flow.collection.CollectionExtensions._
 import vf.model.TypeRelation.{Relative, StrongRelative, Unrelated, WeakRelative}
-import vf.model.{EvolveGroup, TypeRelation, TypeRelations}
+import vf.model.{EvolveGroup, PokeType, TypeRelation, TypeRelations}
 
 import java.io.PrintWriter
 import scala.jdk.CollectionConverters._
@@ -34,7 +33,7 @@ object RandomizeTypes
 	
 	// OTHER    --------------------------
 	
-	def all(groups: Iterable[EvolveGroup])(implicit rom: RomHandler): (Map[Int, Map[Type, Type]], Map[Int, Type]) = {
+	def all(groups: Iterable[EvolveGroup])(implicit rom: RomHandler): (Map[Int, Map[PokeType, PokeType]], Map[Int, PokeType]) = {
 		Log("types") { writer =>
 			val (conversions, additions) = groups.splitFlatMap { apply(_, writer) }
 			// Logs the changed types
@@ -60,7 +59,7 @@ object RandomizeTypes
 	// Returns
 	// 1) All type swaps (bound to pokemon number)
 	// 2) All type additions (bound to pokemon number)
-	def apply(group: EvolveGroup, writer: PrintWriter)(implicit rom: RomHandler): (Map[Int, Map[Type, Type]], Map[Int, Type]) =
+	def apply(group: EvolveGroup, writer: PrintWriter)(implicit rom: RomHandler): (Map[Int, Map[PokeType, PokeType]], Map[Int, PokeType]) =
 	{
 		writer.println(s"\nProcessing $group\t-----------------")
 		writer.println(s"Original types: ${group.types.mkString(", ")}")
@@ -72,7 +71,7 @@ object RandomizeTypes
 			writer.println(s"Adds secondary type: $newType")
 			
 			// May also alter the primary type(s) (lowered chance)
-			val primaryTypeChanges: Map[Int, Map[Type, Type]] = {
+			val primaryTypeChanges: Map[Int, Map[PokeType, PokeType]] = {
 				if (RandomSource.nextDouble() < changePrimaryChance * 0.5) {
 					val conversions = group.primaryTypes.map { original =>
 						// Won't allow conversion to the new secondary type
@@ -96,8 +95,8 @@ object RandomizeTypes
 						}
 						// Merges the 0-2 conversions to a single map (or None if both are empty)
 						if (primaryConversion.nonEmpty || secondaryConversion.nonEmpty) {
-							val bothConversions = primaryConversion.getOrElse(Map[Type, Type]()) ++
-								secondaryConversion.getOrElse(Map[Type, Type]())
+							val bothConversions = primaryConversion.getOrElse(Map[PokeType, PokeType]()) ++
+								secondaryConversion.getOrElse(Map[PokeType, PokeType]())
 							Some(poke.number -> bothConversions)
 						}
 						else
@@ -185,10 +184,10 @@ object RandomizeTypes
 		}
 		// Case: No change to types
 		else
-			Map[Int, Map[Type, Type]]() -> Map[Int, Type]()
+			Map[Int, Map[PokeType, PokeType]]() -> Map[Int, PokeType]()
 	}
 	
-	private def applyPrimaryConversions(group: EvolveGroup, conversions: Map[Type, Type]) =
+	private def applyPrimaryConversions(group: EvolveGroup, conversions: Map[PokeType, PokeType]) =
 		group.iterator.flatMap { poke =>
 			val original = poke.types
 			conversions.get(original.primary).map { newType =>

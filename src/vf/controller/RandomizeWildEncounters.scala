@@ -29,13 +29,13 @@ object RandomizeWildEncounters
 	private val pokeToRandomRatio = 2
 	
 	private val allowedWildBstRange = NumericSpan(0.8, 1.3)
-	private val allowedFinalBstRange = NumericSpan(0.7, 1.5)
+	private val allowedFinalBstRange = NumericSpan(0.7, 1.6)
 	private val allowedBstRanges = Pair(allowedWildBstRange, allowedFinalBstRange)
 	private val bstDiffWeightMods = Pair(0.5, 0.25)
 	
 	private val minTypeRelation: TypeRelation = WeakRelative
-	private val sameTypeWeight = 5
-	private val typeWeights = Map[TypeRelation, Double](StrongRelative -> 3, Relative -> 2, WeakRelative -> 1)
+	private val sameTypeWeight = 8
+	private val typeWeights = Map[TypeRelation, Double](StrongRelative -> 4, Relative -> 2, WeakRelative -> 1)
 	
 	private val baseFormWeight = 2.0
 	private val sameGroupWeight = 0.25

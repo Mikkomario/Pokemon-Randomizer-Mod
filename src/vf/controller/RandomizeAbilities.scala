@@ -1,10 +1,9 @@
 package vf.controller
 
 import com.dabomstew.pkrandom.constants.{Abilities, GlobalConstants}
-import com.dabomstew.pkrandom.pokemon.Type
 import com.dabomstew.pkrandom.romhandlers.RomHandler
 import utopia.flow.collection.CollectionExtensions._
-import vf.model.EvolveGroup
+import vf.model.{EvolveGroup, PokeType}
 import vf.util.RandomUtils
 
 import scala.collection.mutable
@@ -36,7 +35,7 @@ object RandomizeAbilities
 	def all(groups: Iterable[EvolveGroup])(implicit rom: RomHandler) = {
 		// Groups the abilities by the number of times they appear for each original poke type
 		// Also checks how many times an ability appears as a hidden ability and how often it appears on a legendary poke
-		val typeAbilityCounts = Type.values().map { t => t -> mutable.Map[Int, Double]() }.toMap
+		val typeAbilityCounts = PokeType.values.map { t => t -> mutable.Map[Int, Double]() }.toMap
 		// Keys are abilities. Values contain 3 elements:
 		// Appearances as normal abilities, appearances as hidden abilities, appearances on legendary pokes
 		// and appearances as mega abilities

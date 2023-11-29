@@ -1,7 +1,5 @@
 package vf.model
 
-import com.dabomstew.pkrandom.pokemon.Type
-
 /**
  * An enumeration for different wild encounter area types, in places where such may be discerned
  * @author Mikko Hilpinen

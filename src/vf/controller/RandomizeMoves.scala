@@ -43,13 +43,13 @@ object RandomizeMoves
 	private val addedTypeMoveChance = 0.75
 	private val ownTypeMoveChance = 0.5
 	private val typeWeights = Map[TypeRelation, Double](
-		StrongRelative -> 6.0, Relative -> 4.5, WeakRelative -> 3.0, Unrelated -> 1.5)
+		StrongRelative -> 9.0, Relative -> 5.0, WeakRelative -> 3.0, Unrelated -> 1.0)
 	
 	// Affects the chance to gain an advantage against otherwise superior type
-	private val defensiveBuffWeightMod = 0.4
+	private val defensiveBuffWeightMod = 0.5
 	// Affects the chance to gain an advantage against a type which the STAB types are not effective against
 	// Not combined with 'defensiveBuffWeightMod'
-	private val offensiveBuffWeightMod = 0.7
+	private val offensiveBuffWeightMod = 0.8
 	
 	
 	// OTHER    -------------------------
@@ -86,6 +86,21 @@ object RandomizeMoves
 					newMovesBuilder.put(cosmeticPoke.number, copyList)
 				}
 			}
+			// Finally, makes sure all pokes are covered
+			val missingPokes = pokes.flatMap { poke =>
+				if (newMovesBuilder.containsKey(poke.number: Integer))
+					None
+				else {
+					val moveListBuilder = new util.ArrayList[MoveLearnt]()
+					apply(poke, 0, writer).foreach { move => moveListBuilder.add(move.toMoveLearnt) }
+					newMovesBuilder.put(poke.number, moveListBuilder)
+					Some(poke)
+				}
+			}
+			if (missingPokes.nonEmpty) {
+				writer.println(s"\nWARNING: The following ${missingPokes.size} pokes didn't receive moves by default:")
+				missingPokes.foreach { p => writer.println(s"\t- $p (#${p.number})") }
+			}
 			// Applies the new moves
 			rom.setMovesLearnt(newMovesBuilder)
 			pokes.foreach { _.updateState() }
@@ -100,19 +115,19 @@ object RandomizeMoves
 		val typeEffectiveness = poke.types.effectiveness
 		val defensiveWeaknesses = typeEffectiveness.defensiveWeaknesses
 		val offensiveWeaknesses = typeEffectiveness.offensiveWeaknesses
-		val additionalTypeWeights = Type.values().iterator
+		val additionalTypeWeights = PokeType.values.iterator
 			.map { attackType =>
 				val attackEffectiveness = EffectivenessRelations(attackType)
-				val wouldImproveDefense = defensiveWeaknesses
-					.exists { attackerType => attackEffectiveness.offenseRatingAgainst(attackerType) > 0 }
+				val defenseImprovement = defensiveWeaknesses
+					.count { attackerType => attackEffectiveness.offenseRatingAgainst(attackerType) > 0 }
 				val weight = {
-					if (wouldImproveDefense)
-						defensiveBuffWeightMod
+					if (defenseImprovement > 0)
+						math.pow(defensiveBuffWeightMod, defenseImprovement)
 					else {
-						val wouldImproveOffense = offensiveWeaknesses
-							.exists { defenderType => attackEffectiveness.offenseRatingAgainst(defenderType) > 0 }
-						if (wouldImproveOffense)
-							offensiveBuffWeightMod
+						val offenseImprovement = offensiveWeaknesses
+							.count { defenderType => attackEffectiveness.offenseRatingAgainst(defenderType) > 0 }
+						if (offenseImprovement > 0)
+							math.pow(offensiveBuffWeightMod, offenseImprovement)
 						else
 							1.0
 					}
@@ -157,7 +172,7 @@ object RandomizeMoves
 		def swapMove(original: Move) = {
 			// When selecting replacing move type, takes into consideration if the pokemon swapped type
 			// i.e. STAB moves will still remain STAB moves when they preserve their type
-			val originalMoveType = typeConversions.getOrElse(original.`type`, original.`type`)
+			val originalMoveType = typeConversions.getOrElse(original.`type`: PokeType, original.`type`: PokeType)
 			val moveType = {
 				// Case: Move preserves its type
 				if (chance(sameTypeChance))
@@ -195,7 +210,7 @@ object RandomizeMoves
 		def keepMove(original: Move) = {
 			// Case: Can't keep the original move because of type change, overlap or stat change => Swaps to a new move
 			if ((categoriesChanged && original.category != MoveCategory.STATUS) ||
-				typeConversions.contains(original.`type`) ||
+				typeConversions.contains(original.`type`: PokeType) ||
 				pickedMovesBuilder.contains(original.number))
 				swapMove(original)
 			// Case: Keeps the original move
@@ -296,7 +311,7 @@ object RandomizeMoves
 	
 	// Selects from physical vs. special based on stats
 	// May also select status type
-	def randomCategoryIn(moveType: Type, physicalToSpecialRatio: Double)(implicit moves: Moves) = {
+	def randomCategoryIn(moveType: PokeType, physicalToSpecialRatio: Double)(implicit moves: Moves) = {
 		if (RandomSource.nextDouble() < moves.statusMoveRatioByType(moveType))
 			MoveCategory.STATUS
 		else if (RandomSource.nextDouble() < physicalToSpecialRatio)
@@ -306,13 +321,13 @@ object RandomizeMoves
 	}
 	
 	// Randomly selects the move from available options
-	private def randomMove(pickedMovesBuilder: mutable.Set[Int], moveType: Type, category: MoveCategory,
+	private def randomMove(pickedMovesBuilder: mutable.Set[Int], moveType: PokeType, category: MoveCategory,
 	                       powerRange: Option[HasInclusiveOrderedEnds[Double]] = None)
 	                      (implicit moves: Moves): Int =
 		randomMove(Some(moveType), Some(category), powerRange, pickedMovesBuilder)
 	
 	@tailrec
-	private def randomMove(moveType: Option[Type], category: Option[MoveCategory],
+	private def randomMove(moveType: Option[PokeType], category: Option[MoveCategory],
 	                       powerRange: Option[HasInclusiveOrderedEnds[Double]], pickedMovesBuilder: mutable.Set[Int])
 	                      (implicit moves: Moves): Int =
 	{

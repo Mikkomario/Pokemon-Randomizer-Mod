@@ -1,8 +1,8 @@
 package vf.controller
 
-import com.dabomstew.pkrandom.pokemon.Type
 import utopia.paradigm.transform.Adjustment
-import vf.model.{Poke, PokeStat, Pokes}
+import vf.model.{Poke, PokeStat, PokeType, Pokes}
+import vf.model.PokeType._
 import vf.model.PokeStat._
 
 import java.io.PrintWriter
@@ -14,100 +14,101 @@ import java.io.PrintWriter
  */
 object ReflectTypeChangesInStats
 {
-	private val changeAdjustment = Adjustment(0.14)
-	private val staticAdjustment = Adjustment(0.07)
+	private val changeAdjustment = Adjustment(0.12)
+	private val staticAdjustment = Adjustment(0.04)
 	
-	private val typeStatImpact = Map[Type, Map[PokeStat, Int]](
-		Type.NORMAL -> Map(
+	private val typeStatImpact = Map[PokeType, Map[PokeStat, Int]](
+		Normal -> Map(
 			Hp -> 2,
 			Attack -> 1,
 			SpecialAttack -> -2,
 			SpecialDefense -> -1
 		),
-		Type.FLYING -> Map(
+		Flying -> Map(
 			Speed -> 3,
 			Defense -> -1,
 			SpecialDefense -> -1,
 			SpecialAttack -> -1
 		),
-		Type.FIGHTING -> Map(
+		Fighting -> Map(
 			Attack -> 3,
 			SpecialAttack -> -2,
 			SpecialDefense -> -1
 		),
-		Type.DARK -> Map(
+		Dark -> Map(
 			Speed -> 1,
 			Attack -> 1,
 			Defense -> -1,
 			Hp -> -1
 		),
-		Type.PSYCHIC -> Map(
+		Psychic -> Map(
 			SpecialAttack -> 3,
 			SpecialDefense -> 2,
 			Attack -> -3,
 			Defense -> -2
 		),
-		Type.FAIRY -> Map(
+		Fairy -> Map(
 			SpecialDefense -> 2,
 			SpecialAttack -> 1,
 			Speed -> -1,
 			Defense -> -1,
 			Attack -> -1
 		),
-		Type.GHOST -> Map(
+		Ghost -> Map(
 			SpecialDefense -> 1,
 			SpecialAttack -> 1,
 			Hp -> -1,
 			Speed -> -1
 		),
-		Type.BUG -> Map(
+		Bug -> Map(
 			Defense -> 1,
 			Attack -> 1,
 			SpecialDefense -> -1,
 			SpecialAttack -> -1
 		),
-		Type.GROUND -> Map(
+		Ground -> Map(
 			Defense -> 2,
 			Attack -> 2,
 			SpecialDefense -> -2,
 			SpecialAttack -> -2
 		),
-		Type.ROCK -> Map(
+		Rock -> Map(
 			Defense -> 2,
 			Attack -> 2,
 			Speed -> -3,
 			SpecialAttack -> -1
 		),
-		Type.STEEL -> Map(
+		Steel -> Map(
 			Defense -> 3,
 			Speed -> -3
 		),
-		Type.POISON -> Map(
+		Poison -> Map(
 			Defense -> 1,
 			Speed -> -1
 		),
-		Type.GRASS -> Map(
+		Grass -> Map(
 			SpecialAttack -> 1,
 			Speed -> -1
 		),
-		Type.WATER -> Map(
+		Water -> Map(
 			Hp -> 1,
 			SpecialDefense -> 1,
 			Speed -> -1,
 			Attack -> -1
 		),
-		Type.FIRE -> Map(
+		Fire -> Map(
 			Attack -> 1,
 			SpecialAttack -> 1,
 			Defense -> -1,
 			SpecialDefense -> -1
 		),
-		Type.ELECTRIC -> Map(
+		Electric -> Map(
 			SpecialAttack -> 2,
 			Speed -> 2,
 			Defense -> -3,
 			Hp -> -1
-		)
+		),
+		Dragon -> Map()
 	)
 	
 	def apply()(implicit pokes: Pokes): Unit = Log("type-stats") { writer => pokes.foreach { apply(_, writer) } }

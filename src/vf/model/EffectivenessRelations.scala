@@ -3,7 +3,6 @@ package vf.model
 import com.dabomstew.pkrandom.pokemon.{Effectiveness, Type}
 import utopia.flow.collection.immutable.caching.cache.Cache
 import utopia.flow.operator.sign.{Sign, UncertainSign}
-import vf.model.TypeSet.PokeType
 
 import scala.jdk.CollectionConverters._
 
@@ -15,14 +14,14 @@ object EffectivenessRelations
 	// The second keys are offensive types
 	// The values are effectiveness levels
 	private val cache = Cache { against: TypeSet =>
-		Effectiveness.against(against.primary, against.secondary.orNull, 6).asScala.toMap
+		Effectiveness.against(against.primary.toJava, against.secondary.map { _.toJava }.orNull, 6).asScala.toMap
 	}
 	private val relationsCache = Cache { t: TypeSet => new EffectivenessRelations(t) }
 	
 	lazy val averageSingleTypeDefenseRating =
-		Type.values().iterator.map { apply(_).defenseRating }.sum / Type.values().length
+		PokeType.values.iterator.map { apply(_).defenseRating }.sum / Type.values().length
 	lazy val averageSingleTypeOffenseRating =
-		Type.values().iterator.map { apply(_).offenseRating }.sum / Type.values().length
+		PokeType.values.iterator.map { apply(_).offenseRating }.sum / Type.values().length
 	
 	
 	// OTHER    --------------------------
@@ -59,7 +58,7 @@ case class EffectivenessRelations(types: TypeSet)
 	/**
 	 * Overall defensive power of this type combo, where 0 is neutral, negative is weak and positive is strong
 	 */
-	lazy val offenseRating = Type.values().iterator.map { defendingType =>
+	lazy val offenseRating = PokeType.values.iterator.map { defendingType =>
 		val map = cache(TypeSet(defendingType))
 		types.types.map { attackingType => offenseValueOf(map(attackingType)) }.max
 	}.sum
@@ -67,13 +66,12 @@ case class EffectivenessRelations(types: TypeSet)
 	lazy val relativeDefenseRating = defenseRating / averageSingleTypeDefenseRating
 	lazy val relativeOffenseRating = offenseRating / averageSingleTypeOffenseRating
 	
-	lazy val defensiveWeaknesses = Type.values().iterator.filter { defenseRatingAgainst(_) < 0 }.toSet
-	lazy val offensiveWeaknesses = Type.values().iterator.filter { offenseRatingAgainst(_) < 0 }.toSet
+	lazy val defensiveWeaknesses = PokeType.values.iterator.filter { defenseRatingAgainst(_) < 0 }.toSet
+	lazy val offensiveWeaknesses = PokeType.values.iterator.filter { offenseRatingAgainst(_) < 0 }.toSet
 	
 	
 	// OTHER    --------------------------
 	
-	// FIXME: "GAS" and other such types break this
 	def defenseRatingAgainst(damageType: PokeType): Double = defenseValueOf(cache(types)(damageType))
 	def defenseRatingAgainst(other: TypeSet): Double = other.types.map(defenseRatingAgainst).min
 	

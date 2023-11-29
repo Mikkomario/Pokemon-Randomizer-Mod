@@ -32,9 +32,9 @@ object RandomizeBattles
 	private val minStrictTypeRelation: TypeRelation = StrongRelative
 	
 	private val bstDiffWeightMod = 0.5
-	private val sameTypeWeight = 11.0
+	private val sameTypeWeight = 15.0
 	private val typeWeights = Map[TypeRelation, Double](
-		StrongRelative -> 8.0, Relative -> 6.0, WeakRelative -> 3.0, Unrelated -> 1.5
+		StrongRelative -> 9.0, Relative -> 5.0, WeakRelative -> 3.0, Unrelated -> 1.5
 	)
 	
 	
@@ -101,11 +101,13 @@ object RandomizeBattles
 		val selectedGroups = mutable.Set[EvolveGroup]()
 		// Can only apply one mega evo per trainer
 		val megaEvoFlag = Flag()
-		// Each entry contains: 1) Selected evolve group, 2) Selected poke and 3) Encounter level
+		// Each entry contains: 1) Original evolve group, 2) Selected evolve group, 3) Selected poke and 4) Encounter level
 		val selectedOpponents = Vector.from(Random.shuffle(trainer.pokemon.asScala).map { tp =>
 			val originalNumber = tp.pokemon.number
 			val originalGroup = groups(originalNumber)
 			val level = math.round(tp.level * levelMod).toInt
+			val originalPoke = originalGroup.formAtLevel(tp.level)
+			val originalTypeRelations = originalPoke.types.relations
 			val (selectedGroup, selectedPoke) = starterMapping.get(originalGroup) match {
 				// Case: Replacing a starter => Uses a pre-fixed mapping
 				case Some(newStarterGroup) => newStarterGroup -> newStarterGroup.formAtLevel(level)
@@ -114,11 +116,15 @@ object RandomizeBattles
 					// If the original poke can mega-evolve, requires the resulting poke to be able to do that as well
 					val requireMegaEvolvable = tp.canMegaEvolve
 					// Looks for a mapping result first
-					// TODO: Apply stricter type-checking here also?
 					val mappingOptions = pokeMapping.getOrElse(originalNumber, Vector())
 						.filter { g =>
-							(!requireMegaEvolvable || g.canMegaEvolve) &&
-								minAppearanceLevels.get(g).forall { _ <= level } && !selectedGroups.contains(g)
+							// Checks for a possible stricter type-requirement
+							if (useStrictTyping &&
+								originalTypeRelations.apply(g.formAtLevel(level).types) < minStrictTypeRelation)
+								false
+							else
+								(!requireMegaEvolvable || g.canMegaEvolve) &&
+									minAppearanceLevels.get(g).forall { _ <= level } && !selectedGroups.contains(g)
 						}
 					// Case: Mapping result available => Selects one randomly
 					if (mappingOptions.nonEmpty) {
@@ -136,7 +142,6 @@ object RandomizeBattles
 			// TODO: Apply random form
 			
 			// Logs
-			val originalPoke = originalGroup.formAtLevel(tp.level)
 			writer.println(s"\t- ${ originalPoke.name } (${ originalPoke.originalState.types }) lvl ${ tp.level } (${
 				originalPoke.originalState.bst}) => ${
 				selectedPoke.name } (${ selectedPoke.types }) lvl $level (${ selectedPoke.bst })")
@@ -159,16 +164,23 @@ object RandomizeBattles
 			if (settings.isShinyChance && RandomSource.nextInt(256) == 0)
 				tp.IVs |= (1 << 30)
 			
-			// Returns selected group, selected poke and applied level
-			(selectedGroup, selectedPoke, level)
+			// Returns original group, selected group, selected poke and applied level
+			(originalGroup, selectedGroup, selectedPoke, level)
 		})
 		
 		// Adds additional trainer pokemon, if applicable (settings-based)
 		val defaultAdditionalPokeCount = {
 			if (trainer.isBoss)
 				settings.getAdditionalBossTrainerPokemon
-			else if (trainer.isImportant)
-				settings.getAdditionalImportantTrainerPokemon
+			else if (trainer.isImportant) {
+				// Exception: The early rivals don't get additional pokes, because that's just unfair
+				if (selectedOpponents.exists { _._4 < 10 })
+					0
+				else if (selectedOpponents.exists { _._4 < 15 })
+					settings.getAdditionalImportantTrainerPokemon min 1
+				else
+					settings.getAdditionalImportantTrainerPokemon
+			}
 			else
 				settings.getAdditionalRegularTrainerPokemon
 		}
@@ -179,12 +191,13 @@ object RandomizeBattles
 			val maxTotalCount = if (trainer.multiBattleStatus != Trainer.MultiBattleStatus.NEVER) 3 else 6
 			defaultAdditionalPokeCount min (maxTotalCount - selectedOpponents.size)
 		}
-		val trainerPokes = selectedOpponents.map { _._2 }
+		val trainerPokes = selectedOpponents.map { _._3 }
 		if (additionalPokeCount > 0) {
-			val (trainerPokeGroups, trainerPokeLevels) = selectedOpponents
-				.splitMap { case (group, _, level) => (group, level) }
-			val (additionalPokes, additionalPokeLevel) = selectAdditionalPokes(additionalPokeCount, trainerPokeGroups,
-				trainerPokeLevels, pokePool, selectedGroups, minAppearanceLevels, writer)
+			val (originalTrainerPokeGroups, trainerPokeLevels) = selectedOpponents
+				.splitMap { case (originalGroup, _, _, level) => (originalGroup, level) }
+			val (additionalPokes, additionalPokeLevel) = selectAdditionalPokes(additionalPokeCount,
+				originalTrainerPokeGroups, trainerPokes, trainerPokeLevels, pokePool, selectedGroups,
+				minAppearanceLevels)
 			
 			// Logs
 			writer.println(s"Assigns $additionalPokeCount new pokes:")
@@ -210,7 +223,8 @@ object RandomizeBattles
 			
 			trainerPokes ++ additionalPokes
 		}
-		trainerPokes
+		else
+			trainerPokes
 	}
 	
 	private def findMatchFor(originalGroup: EvolveGroup, level: Int, pool: Iterable[EvolveGroup],
@@ -275,18 +289,20 @@ object RandomizeBattles
 				val minLevel = minAppearanceLevels.get(group)
 				val minLevelAccepted = minLevel.forall { _ <= level }
 				val wasUsed = used.contains(group)
-				val form = group.formAtLevel(level)
-				val bst = form.bst
-				val bstAccepted = allowedBst.contains(bst)
-				val isSameType = originalType.types.exists { t => form.types.contains(t) }
-				val typeRelation = typeRelations(form.types)
-				val typeAccepted = isSameType || typeRelation >= minTypeRelation
-				writer.println(s"\t\t- $group => ${form.name} (${form.types} $bst BST)")
-				writer.println(s"\t\t\t- Can mega evolve = ${group.canMegaEvolve}; Mega condition accepted = $megaAccepted")
-				writer.println(s"\t\t\t- Min appearance level = $minLevel; Level accepted = $minLevelAccepted")
-				writer.println(s"\t\t\t- Was already used = $wasUsed")
-				writer.println(s"\t\t\t- BST accepted = $bstAccepted")
-				writer.println(s"\t\t\t- Same type = $isSameType; Type relation = $typeRelation; Type accepted = $typeAccepted")
+				if (megaAccepted && minLevelAccepted && !wasUsed) {
+					val form = group.formAtLevel(level)
+					val bst = form.bst
+					val bstAccepted = allowedBst.contains(bst)
+					val isSameType = originalType.types.exists { t => form.types.contains(t) }
+					val typeRelation = typeRelations(form.types)
+					val typeAccepted = isSameType || typeRelation >= minTypeRelation
+					writer.println(s"\t\t- $group => ${form.name} (${form.types} $bst BST)")
+					writer.println(s"\t\t\t- Can mega evolve = ${group.canMegaEvolve}; Mega condition accepted = $megaAccepted")
+					writer.println(s"\t\t\t- Min appearance level = $minLevel; Level accepted = $minLevelAccepted")
+					// writer.println(s"\t\t\t- Was already used = $wasUsed")
+					writer.println(s"\t\t\t- BST accepted = $bstAccepted")
+					writer.println(s"\t\t\t- Same type = $isSameType; Type relation = $typeRelation; Type accepted = $typeAccepted")
+				}
 			}
 			
 			originalGroup -> original
@@ -298,16 +314,20 @@ object RandomizeBattles
 	// WET WET - Needs refactoring with findMatch
 	// Assumes additionalPokeCount > 0
 	private def selectAdditionalPokes(additionalPokeCount: Int, originalGroups: Iterable[EvolveGroup],
-	                                levels: Iterable[Int], pool: Iterable[EvolveGroup], used: mutable.Set[EvolveGroup],
-	                                minAppearanceLevels: Map[EvolveGroup, Int], writer: PrintWriter)
-	                               (implicit rom: RomHandler) =
+	                                  newPokes: Iterable[Poke],
+	                                  levels: Iterable[Int], pool: Iterable[EvolveGroup], used: mutable.Set[EvolveGroup],
+	                                  minAppearanceLevels: Map[EvolveGroup, Int]) =
 	{
 		// Compares against the average BST and uses an average level
 		val level = (levels.sum.toDouble / levels.size).round.toInt
 		val referenceBst = originalGroups.map { _.formAtLevel(level).originalState.bst }.sum / originalGroups.size
 		// Checks whether there is a common type(s) between the original pokes
 		// If so, uses a poke that involves one of those types
-		val commonTypes = originalGroups.map { _.types }.reduce { _ & _ }
+		val commonTypes = NotEmpty(
+			originalGroups.map { _.formAtLevel(level).originalState.types.types.toSet }.reduce { _ & _ })
+			// If there were no common types in the originals, checks whether there exists
+			// a new theme in the new selections
+			.getOrElse { newPokes.map { _.types.types.toSet }.reduce { _ & _ } }
 		
 		// Applies the following filters:
 		//      1) Min appearance level filter - Will be looser for battles with < lvl 5 pokes

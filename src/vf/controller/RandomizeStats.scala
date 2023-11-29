@@ -4,6 +4,8 @@ import com.dabomstew.pkrandom.RandomSource
 import com.dabomstew.pkrandom.constants.Species
 import utopia.flow.collection.CollectionExtensions._
 import utopia.flow.collection.immutable.Pair
+import utopia.flow.operator.sign.Sign.{Negative, Positive}
+import utopia.paradigm.transform.Adjustment
 import vf.model.PokeStat.Hp
 import vf.model.{EvolveGroup, PokeStat}
 
@@ -20,10 +22,10 @@ object RandomizeStats
 	
 	private val randomizeStatChainChance = 0.7
 	private val randomizeMoreChainChance = 0.7
-	private val randomizeDecrease = 0.1
-	private val randomizeIncrease = 0.15
+	private val adjustment = Adjustment(0.1)
+	private val maxImpact = 5
 	
-	private val shuffleStatChainChance = 0.7
+	private val shuffleStatChainChance = 0.5
 	
 	
 	// OTHER    ------------------------------
@@ -55,15 +57,11 @@ object RandomizeStats
 			.continually {
 				// Randomizes a random amount (using chaining)
 				var impact = 1
-				while (RandomSource.nextDouble() < randomizeMoreChainChance) {
+				while (RandomSource.nextDouble() < randomizeMoreChainChance && impact < maxImpact) {
 					impact += 1
 				}
-				val mod = {
-					if (RandomSource.nextBoolean())
-						math.pow(1 + randomizeIncrease, impact)
-					else
-						math.pow(1 - randomizeDecrease, impact)
-				}
+				val direction = if (RandomSource.nextBoolean()) Positive else Negative
+				val mod = adjustment(direction * impact)
 				// Randomizes a random stat
 				PokeStat.random -> mod
 			}

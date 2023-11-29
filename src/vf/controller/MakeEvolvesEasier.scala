@@ -5,6 +5,7 @@ import com.dabomstew.pkrandom.pokemon.EvolutionType
 import utopia.flow.collection.CollectionExtensions._
 import utopia.flow.util.NotEmpty
 import vf.model.{EvolveGroup, Poke}
+import vf.util.RandomUtils
 
 import java.io.PrintWriter
 
@@ -18,7 +19,7 @@ object MakeEvolvesEasier
 {
 	// ATTRIBUTES   ------------------------
 	
-	private val level = EvolutionType.LEVEL
+	private val flattenLevelOptionsChance = 0.5
 	
 	private val firstEvolveLevel = 21
 	private val lastEvolveLevel = 36
@@ -100,8 +101,14 @@ object MakeEvolvesEasier
 					// Converts one of the evolves into a simple level evolve, if possible
 					val hasLevel = evolves.exists { _.usesLevel }
 					val toLevelEvo = {
+						// Case: Can't have more level-based evos
 						if (hasLevel)
 							None
+						// Case: Random: Just converts one of the more difficult evos to level-based
+						else if (RandomUtils.chance(flattenLevelOptionsChance))
+							Some(NotEmpty(evolves.filter { evo => toLevelOptions.contains(evo.evoType) }).getOrElse(evolves)
+								.random)
+						// Case: Converts the most difficult evo to level-based
 						else
 							toLevelOptions.findMap { o => evolves.find { _.evoType == o } }
 								.orElse { Some(evolves.random) }

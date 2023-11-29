@@ -1,11 +1,11 @@
 package vf.model
 
-import com.dabomstew.pkrandom.pokemon.Type
 import com.dabomstew.pkrandom.romhandlers.RomHandler
 import utopia.flow.collection.CollectionExtensions._
 import utopia.flow.collection.immutable.caching.cache.Cache
 import utopia.flow.collection.immutable.{Graph, Pair}
 import utopia.flow.util.NotEmpty
+import vf.model.PokeType.{Bug, Dark, Dragon, Electric, Fairy, Fighting, Fire, Flying, Ghost, Grass, Ground, Ice, Normal, Poison, Psychic, Rock, Steel, Water}
 import vf.model.TypeRelation.{Relative, StrongRelative, Unrelated, WeakRelative}
 import vf.util.RandomUtils._
 
@@ -13,56 +13,56 @@ object TypeRelations
 {
 	// ATTRIBUTES   -------------------------
 	
-	private val relations = Graph[Type, TypeRelation](Set(
-		(Type.NORMAL, StrongRelative, Type.PSYCHIC),
-		(Type.NORMAL, StrongRelative, Type.FIGHTING),
-		(Type.NORMAL, Relative, Type.FAIRY),
-		(Type.NORMAL, Relative, Type.DARK),
-		(Type.PSYCHIC, StrongRelative, Type.FAIRY),
-		(Type.PSYCHIC, StrongRelative, Type.DARK),
-		(Type.PSYCHIC, Relative, Type.GHOST),
-		(Type.PSYCHIC, Relative, Type.ELECTRIC),
-		(Type.FAIRY, Relative, Type.DARK),
-		(Type.FAIRY, Relative, Type.DRAGON),
-		(Type.FAIRY, Relative, Type.ELECTRIC),
-		(Type.FAIRY, Relative, Type.GRASS),
-		(Type.FAIRY, WeakRelative, Type.GHOST),
-		(Type.FAIRY, WeakRelative, Type.FLYING),
-		(Type.FAIRY, WeakRelative, Type.WATER),
-		(Type.FAIRY, WeakRelative, Type.ICE),
-		(Type.FAIRY, WeakRelative, Type.POISON),
-		(Type.DARK, StrongRelative, Type.GHOST),
-		(Type.DARK, StrongRelative, Type.FIGHTING),
-		(Type.DARK, Relative, Type.POISON),
-		(Type.FIGHTING, Relative, Type.GROUND),
-		(Type.FIGHTING, Relative, Type.POISON),
-		(Type.GHOST, Relative, Type.POISON),
-		(Type.GHOST, WeakRelative, Type.FLYING),
-		(Type.GHOST, WeakRelative, Type.ICE),
-		(Type.ELECTRIC, Relative, Type.FIRE),
-		(Type.ELECTRIC, Relative, Type.STEEL),
-		(Type.ELECTRIC, WeakRelative, Type.WATER),
-		(Type.ELECTRIC, WeakRelative, Type.ICE),
-		(Type.ELECTRIC, WeakRelative, Type.FLYING),
-		(Type.ELECTRIC, WeakRelative, Type.BUG),
-		(Type.FIRE, StrongRelative, Type.DRAGON),
-		(Type.FIRE, Relative, Type.ROCK),
-		(Type.FIRE, WeakRelative, Type.GROUND),
-		(Type.DRAGON, WeakRelative, Type.FLYING),
-		(Type.DRAGON, WeakRelative, Type.WATER),
-		(Type.DRAGON, WeakRelative, Type.ICE),
-		(Type.WATER, StrongRelative, Type.ICE),
-		(Type.WATER, WeakRelative, Type.FLYING),
-		(Type.ICE, WeakRelative, Type.FLYING),
-		(Type.POISON, StrongRelative, Type.GRASS),
-		(Type.POISON, Relative, Type.BUG),
-		(Type.POISON, Relative, Type.GROUND),
-		(Type.GRASS, Relative, Type.GROUND),
-		(Type.GRASS, WeakRelative, Type.BUG),
-		(Type.GROUND, StrongRelative, Type.ROCK),
-		(Type.GROUND, WeakRelative, Type.BUG),
-		(Type.BUG, WeakRelative, Type.STEEL),
-		(Type.ROCK, StrongRelative, Type.STEEL)
+	private val relations = Graph[PokeType, TypeRelation](Set(
+		(Normal, StrongRelative, Psychic),
+		(Normal, StrongRelative, Fighting),
+		(Normal, Relative, Fairy),
+		(Normal, Relative, Dark),
+		(Psychic, StrongRelative, Fairy),
+		(Psychic, StrongRelative, Dark),
+		(Psychic, Relative, Ghost),
+		(Psychic, Relative, Electric),
+		(Fairy, Relative, Dark),
+		(Fairy, Relative, Dragon),
+		(Fairy, Relative, Electric),
+		(Fairy, Relative, Grass),
+		(Fairy, WeakRelative, Ghost),
+		(Fairy, WeakRelative, Flying),
+		(Fairy, WeakRelative, Water),
+		(Fairy, WeakRelative, Ice),
+		(Fairy, WeakRelative, Poison),
+		(Dark, StrongRelative, Ghost),
+		(Dark, StrongRelative, Fighting),
+		(Dark, Relative, Poison),
+		(Fighting, Relative, Ground),
+		(Fighting, Relative, Poison),
+		(Ghost, Relative, Poison),
+		(Ghost, WeakRelative, Flying),
+		(Ghost, WeakRelative, Ice),
+		(Electric, Relative, Fire),
+		(Electric, Relative, Steel),
+		(Electric, WeakRelative, Water),
+		(Electric, WeakRelative, Ice),
+		(Electric, WeakRelative, Flying),
+		(Electric, WeakRelative, Bug),
+		(Fire, StrongRelative, Dragon),
+		(Fire, Relative, Rock),
+		(Fire, WeakRelative, Ground),
+		(Dragon, WeakRelative, Flying),
+		(Dragon, WeakRelative, Water),
+		(Dragon, WeakRelative, Ice),
+		(Water, StrongRelative, Ice),
+		(Water, WeakRelative, Flying),
+		(Ice, WeakRelative, Flying),
+		(Poison, StrongRelative, Grass),
+		(Poison, Relative, Bug),
+		(Poison, Relative, Ground),
+		(Grass, Relative, Ground),
+		(Grass, WeakRelative, Bug),
+		(Ground, StrongRelative, Rock),
+		(Ground, WeakRelative, Bug),
+		(Bug, WeakRelative, Steel),
+		(Rock, StrongRelative, Steel)
 	), isTwoWayBound = true)
 	
 	// Caches calculated relations for optimization
@@ -75,7 +75,7 @@ object TypeRelations
 	// OTHER    -----------------------
 	
 	def of(types: TypeSet)(implicit rom: RomHandler) = typeSetRelativesCache(rom)(types)
-	def of(t: Type)(implicit rom: RomHandler) = apply(TypeSet(t), typeRelativesCache(rom)(t))
+	def of(t: PokeType)(implicit rom: RomHandler) = apply(TypeSet(t), typeRelativesCache(rom)(t))
 	
 	private def _of(types: TypeSet)(implicit rom: RomHandler) = {
 		val typeRelatives = typeRelativesCache(rom)
@@ -122,14 +122,13 @@ object TypeRelations
 		}
 	}
 	
-	private def relationsOf(t: Type)(implicit rom: RomHandler) = {
+	private def relationsOf(t: PokeType)(implicit rom: RomHandler) = {
 		val related = relations.node(t).leavingEdges.iterator
 			// Removes all types that don't appear in the targeted game
 			.filter { e => rom.typeInGame(e.end.value) }
 			.map { e => e.value -> e.end.value }
 			.toVector
-		val unrelated = Type.values().iterator
-			.filter { t => rom.typeInGame(t) && !related.exists { _._2 == t } }.toVector
+		val unrelated = PokeType.values.filter { t => rom.typeInGame(t) && !related.exists { _._2 == t } }
 		val relatedMap = relations.node(t).leavingEdges.iterator
 			// Removes all types that don't appear in the targeted game
 			// Also removes the type itself
@@ -148,7 +147,7 @@ object TypeRelations
  * @author Mikko Hilpinen
  * @since 6.7.2023, v1.0-alt
  */
-case class TypeRelations(origin: TypeSet, relatives: Map[TypeRelation, Iterable[Type]])
+case class TypeRelations(origin: TypeSet, relatives: Map[TypeRelation, Iterable[PokeType]])
 {
 	// ATTRIBUTES   ------------------
 	
@@ -158,7 +157,7 @@ case class TypeRelations(origin: TypeSet, relatives: Map[TypeRelation, Iterable[
 	
 	// COMPUTED ----------------------
 	
-	def random(weights: Map[TypeRelation, Double], additionalWeights: Map[Type, Double] = Map()) = {
+	def random(weights: Map[TypeRelation, Double], additionalWeights: Map[PokeType, Double] = Map()) = {
 		// Case: No type relations => Yields the original type
 		if (relatives.isEmpty)
 			origin.random
@@ -209,9 +208,9 @@ case class TypeRelations(origin: TypeSet, relatives: Map[TypeRelation, Iterable[
 	// Finds the type relation strength with another type-set
 	def apply(types: TypeSet) = types.types.iterator.map(relationStrengths.apply).reduce { _ avg _ }
 	
-	def -(t: Type) =
+	def -(t: PokeType) =
 		copy(relatives = relatives.view.mapValues { _.filterNot { _ == t } }.filterNot { _._2.isEmpty }.toMap)
-	def --(types: Iterable[Type]) =
+	def --(types: Iterable[PokeType]) =
 		copy(relatives = relatives.view
 			.mapValues { _.filterNot { t => types.exists { _ == t } } }.filterNot { _._2.isEmpty }.toMap)
 }
