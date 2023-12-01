@@ -1,5 +1,6 @@
 package vf.controller
 
+import com.dabomstew.pkrandom.constants.Species
 import com.dabomstew.pkrandom.pokemon._
 import com.dabomstew.pkrandom.romhandlers.RomHandler
 import com.dabomstew.pkrandom.{RandomSource, Settings}
@@ -28,6 +29,7 @@ object RandomizeMoves
 	// 0 = no extra moves, 1 = 100% extra moves, 2 = 200% extra moves, and so on...
 	private val extraMoveRatio = 1
 	private val minMovesCount = 12
+	private val additionalMovesPerFavouriteLevel = 4
 	
 	private val swapMoveChance = 0.4
 	private val sameTypeChance = 0.4
@@ -50,6 +52,8 @@ object RandomizeMoves
 	// Affects the chance to gain an advantage against a type which the STAB types are not effective against
 	// Not combined with 'defensiveBuffWeightMod'
 	private val offensiveBuffWeightMod = 0.8
+	// An favourite level -based increase sometimes applied to defensive and offensive weight modifiers
+	private val buffWeightIncreasePerFavouriteLevel = 0.1
 	
 	
 	// OTHER    -------------------------
@@ -73,7 +77,8 @@ object RandomizeMoves
 						case None => evolveLevel
 					}
 					val moveListBuilder = new util.ArrayList[MoveLearnt]()
-					apply(poke, firstLevel, writer).foreach { move => moveListBuilder.add(move.toMoveLearnt) }
+					apply(poke, firstLevel, group.favouriteLevel, writer)
+						.foreach { move => moveListBuilder.add(move.toMoveLearnt) }
 					newMovesBuilder.put(poke.number, moveListBuilder)
 				}
 			}
@@ -81,7 +86,6 @@ object RandomizeMoves
 			pokes.cosmeticForms.foreach { cosmeticPoke =>
 				if (originalMovesLearnt.containsKey(cosmeticPoke.number: Integer) &&
 					originalMovesLearnt.containsKey(cosmeticPoke.baseForme.number: Integer)) {
-					// TODO: Might want to copy the MoveLearnt instances, also
 					val copyList = new java.util.ArrayList(newMovesBuilder.get(cosmeticPoke.baseForme.number))
 					newMovesBuilder.put(cosmeticPoke.number, copyList)
 				}
@@ -92,7 +96,7 @@ object RandomizeMoves
 					None
 				else {
 					val moveListBuilder = new util.ArrayList[MoveLearnt]()
-					apply(poke, 0, writer).foreach { move => moveListBuilder.add(move.toMoveLearnt) }
+					apply(poke, 0, 0, writer).foreach { move => moveListBuilder.add(move.toMoveLearnt) }
 					newMovesBuilder.put(poke.number, moveListBuilder)
 					Some(poke)
 				}
@@ -108,7 +112,7 @@ object RandomizeMoves
 	}
 	
 	// Returns new moves to assign (level -> move number)
-	private def apply(poke: Poke, firstLevel: Int, writer: PrintWriter)
+	private def apply(poke: Poke, firstLevel: Int, favouriteLevel: Int, writer: PrintWriter)
 	                 (implicit moves: Moves, settings: Settings, rom: RomHandler): Vector[MoveLearn] =
 	{
 		// Adds weight modifiers to types based on how they affect this poke's offensive and defensive capabilities
@@ -132,7 +136,7 @@ object RandomizeMoves
 							1.0
 					}
 				}
-				attackType -> weight
+				attackType -> (weight + buffWeightIncreasePerFavouriteLevel * favouriteLevel)
 			}
 			// Won't add a weight modifier to own types
 			.toMap -- poke.types.types
@@ -226,8 +230,11 @@ object RandomizeMoves
 		val originalStartingMoves = poke.originalState.startingMoves
 		
 		val evoMoves = {
+			// Case: Aegislash => Will keep it's evo moves (king's shield)
+			if (poke.number == Species.aegislash)
+				originalEvoMoves
 			// Case: Already has evo moves => Possibly swaps them
-			if (originalEvoMoves.nonEmpty)
+			else if (originalEvoMoves.nonEmpty)
 				originalEvoMoves.map { move => swapOrKeep(moves.byNumber(move)) }
 			// Case: No existing evo moves => May add (based on settings)
 			else if (settings.isEvolutionMovesForAll)
@@ -278,15 +285,16 @@ object RandomizeMoves
 				.map { case (level, move) => MoveLearn(level, move.number) })
 		val finalMoves = {
 			val realisticMovesCount = standardMoves.count { _.level >= firstLevel }
+			val addedMoveCount = ((realisticMovesCount - minMovesCount) max 0) +
+				additionalMovesPerFavouriteLevel * favouriteLevel
 			// Case: Additional moves are not needed
-			if (realisticMovesCount >= minMovesCount) {
+			if (addedMoveCount <= 0) {
 				writer.println(s"=> $realisticMovesCount \"realistic\" moves")
 				standardMoves
 			}
 			// Case: New moves are needed => Generates as many as are needed
 			else {
-				writer.println(s"=> $realisticMovesCount \"realistic\" moves => Adds ${
-					minMovesCount - realisticMovesCount} new moves")
+				writer.println(s"=> $realisticMovesCount \"realistic\" moves => Adds $addedMoveCount new moves")
 				// Won't place any moves on levels where there are moves already
 				val usedLevels = mutable.Set[Int]()
 				standardMoves.foreach { usedLevels += _.level }
@@ -300,7 +308,7 @@ object RandomizeMoves
 						usedLevels += level
 						MoveLearn(level, move)
 					}
-					.take(minMovesCount - realisticMovesCount)
+					.take(addedMoveCount)
 				standardMoves ++ newMovesIter
 			}
 		}

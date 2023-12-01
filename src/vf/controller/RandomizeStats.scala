@@ -53,6 +53,7 @@ object RandomizeStats
 	def apply(group: EvolveGroup, writer: PrintWriter) = {
 		writer.println(s"\nProcessing $group\t----------------")
 		// Modifies n stats by n%
+		var modsApplied = 0
 		val modifiers = Iterator
 			.continually {
 				// Randomizes a random amount (using chaining)
@@ -60,7 +61,19 @@ object RandomizeStats
 				while (RandomSource.nextDouble() < randomizeMoreChainChance && impact < maxImpact) {
 					impact += 1
 				}
-				val direction = if (RandomSource.nextBoolean()) Positive else Negative
+				// The first modifications, up to the group's "favouriteness" level are guaranteed to be positive
+				// After these, there will be a guaranteed negative mod as well
+				modsApplied += 1
+				val direction = {
+					if (modsApplied < group.favouriteLevel)
+						Positive
+					else if (modsApplied == group.favouriteLevel)
+						Negative
+					else if (RandomSource.nextBoolean())
+						Positive
+					else
+						Negative
+				}
 				val mod = adjustment(direction * impact)
 				// Randomizes a random stat
 				PokeStat.random -> mod

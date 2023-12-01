@@ -24,6 +24,15 @@ class Evo(wrapped: Evolution) extends EvoLike
 	
 	def carriesStats = wrapped.carryStats
 	
+	def levelThreshold_=(newThreshold: Int) = {
+		if (usesLevel) {
+			wrapped.extraInfo = newThreshold
+			updateState()
+		}
+		else
+			makeLevelBased(newThreshold)
+	}
+	
 	
 	// IMPLEMENTED  ---------------------
 	

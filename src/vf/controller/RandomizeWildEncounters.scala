@@ -41,6 +41,8 @@ object RandomizeWildEncounters
 	private val sameGroupWeight = 0.25
 	private val singleFormWeight = 3.0
 	
+	private val weightIncreasePerFavouriteLevel = 1.0
+	
 	
 	// OTHER    -----------------------------
 	
@@ -54,8 +56,6 @@ object RandomizeWildEncounters
 			val useTimeOfDay = settings.isUseTimeBasedEncounters
 			val baseEncounters = rom.getEncounters(useTimeOfDay)
 			val originalEncounters = rom.collapsedEncounters(baseEncounters)
-			// TODO: Possibly make the original encounters less varied or shuffled
-			//  (National Dex possibly breaks trainer encounter randomization)
 			// Scans all zones, encounters and levels
 			val allEncounters = originalEncounters.iterator().asScala.flatMap { encounters =>
 				encounters.encounters.iterator().asScala.map { e => new WildEncounter(encounters.offset, e) }
@@ -251,7 +251,9 @@ object RandomizeWildEncounters
 					val bstWeight = bstRatios.mergeWith(bstDiffWeightMods) { (ratio, weightMod) =>
 						math.pow(1 - (1 - ratio).abs, weightMod)
 					}.merge { (a, b) => (a + b) / 2.0 }
-					Some((group, form) -> (groupWeight * formWeight * formCountWeight * typeWeight * bstWeight))
+					val favouriteWeight = 1.0 + group.favouriteLevel * weightIncreasePerFavouriteLevel
+					Some((group, form) -> (groupWeight * formWeight * formCountWeight * typeWeight *
+						bstWeight * favouriteWeight))
 				}
 				else
 					None

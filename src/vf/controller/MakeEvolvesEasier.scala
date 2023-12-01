@@ -25,6 +25,9 @@ object MakeEvolvesEasier
 	private val lastEvolveLevel = 36
 	private val midFormLevels = 15
 	
+	private val decreaseEvoLevelAfterThreshold = 40
+	private val decreaseModAfterThreshold = 0.4
+	
 	// Prioritized list of evolution types which to convert into "level"
 	// Applied on pokes that have splitting evolves
 	private val toLevelOptions = Vector(
@@ -143,6 +146,15 @@ object MakeEvolvesEasier
 						}
 					}
 			}
+			// Also, if the poke evolves at a very late level, decreases the evo level
+			evolves.flatMap { evo => evo.levelThreshold.filter { _ > decreaseEvoLevelAfterThreshold }.map { evo -> _ } }
+				.foreach { case (evo, level) =>
+					val newThreshold = decreaseEvoLevelAfterThreshold +
+						((level - decreaseEvoLevelAfterThreshold) * decreaseModAfterThreshold).toInt
+					writer.println(s"Decreases the evo level from $level to $newThreshold")
+					evo.levelThreshold = newThreshold
+				}
+			
 			poke.updateState()
 		}
 	}

@@ -1,6 +1,6 @@
 package vf.controller
 
-import com.dabomstew.pkrandom.constants.{Abilities, GlobalConstants}
+import com.dabomstew.pkrandom.constants.{Abilities, GlobalConstants, Species}
 import com.dabomstew.pkrandom.romhandlers.RomHandler
 import utopia.flow.collection.CollectionExtensions._
 import vf.model.{EvolveGroup, PokeType}
@@ -19,8 +19,8 @@ object RandomizeAbilities
 	// private val nonTypeWeight = 0.1
 	// private val typeWeightMod = 10.0
 	
-	val weakAbilities = GlobalConstants.badAbilities.asScala.toSet.map { a: Integer => a: Int }
-	val negativeAbilities = GlobalConstants.negativeAbilities.asScala.toSet.map { a: Integer => a: Int }
+	private val weakAbilities = GlobalConstants.badAbilities.asScala.toSet.map { a: Integer => a: Int }
+	private val negativeAbilities = GlobalConstants.negativeAbilities.asScala.toSet.map { a: Integer => a: Int }
 	
 	private val normalWeight = 0.3
 	private val hiddenWeight = 1.0
@@ -30,6 +30,11 @@ object RandomizeAbilities
 	
 	private val weakWeight = 0.3
 	private val negativeWeight = 0.6
+	
+	private val notRandomizedPokeNumbers = Set(
+		Species.castform, Species.darmanitan, Species.aegislash, Species.wishiwashi, Species.cherrim, Species.shedinja,
+		Species.arceus, Species.mimikyu
+	)
 	
 	// NB: For logging later
 	// romHandler.abilityName(pkmn.ability1)
@@ -48,34 +53,37 @@ object RandomizeAbilities
 			// Because group pokes may repeat info, decreases the impact
 			val mod = 1.0 / group.size
 			group.iterator.foreach { poke =>
-				val types = poke.originalState.types
-				val abilities = poke.originalState.abilities
-					// Applies ROM-specific restrictions
-					.take(rom.abilitiesPerPokemon()).filter { _ <= rom.highestAbilityIndex() }
-				abilities.zipWithIndex.foreach { case (ability, index) =>
-					val primaryMap = typeAbilityCounts(types.primary)
-					// Adds more emphasis on the primary type for dual types
-					types.secondary match {
-						case Some(secondaryType) =>
-							primaryMap(ability) = primaryMap.getOrElse(ability, 0.0) + mod * 0.7
-							val secondaryMap = typeAbilityCounts(secondaryType)
-							secondaryMap(ability) = secondaryMap.getOrElse(ability, 0.0) + mod * 0.3
-						case None => primaryMap(ability) = primaryMap.getOrElse(ability, 0.0) + mod
-					}
-					// Records ability context
-					abilityContextCounts.updateWith(ability) { prev =>
-						val (normal, hidden, legendary, mega) = prev.getOrElse((0.0, 0.0, 0.0, 0.0))
-						val newStatus = {
-							if (poke.isMega)
-								(normal, hidden, legendary, mega + mod)
-							else if (poke.isLegendary)
-								(normal, hidden, legendary + mod, mega)
-							else if (index == abilities.size - 1)
-								(normal, hidden + mod, legendary, mega)
-							else
-								(normal + mod, hidden, legendary, mega)
+				// There are certain form-related abilities that shouldn't get randomized
+				if (!notRandomizedPokeNumbers.contains(poke.number)) {
+					val types = poke.originalState.types
+					val abilities = poke.originalState.abilities
+						// Applies ROM-specific restrictions
+						.take(rom.abilitiesPerPokemon()).filter { _ <= rom.highestAbilityIndex() }
+					abilities.zipWithIndex.foreach { case (ability, index) =>
+						val primaryMap = typeAbilityCounts(types.primary)
+						// Adds more emphasis on the primary type for dual types
+						types.secondary match {
+							case Some(secondaryType) =>
+								primaryMap(ability) = primaryMap.getOrElse(ability, 0.0) + mod * 0.7
+								val secondaryMap = typeAbilityCounts(secondaryType)
+								secondaryMap(ability) = secondaryMap.getOrElse(ability, 0.0) + mod * 0.3
+							case None => primaryMap(ability) = primaryMap.getOrElse(ability, 0.0) + mod
 						}
-						Some(newStatus)
+						// Records ability context
+						abilityContextCounts.updateWith(ability) { prev =>
+							val (normal, hidden, legendary, mega) = prev.getOrElse((0.0, 0.0, 0.0, 0.0))
+							val newStatus = {
+								if (poke.isMega)
+									(normal, hidden, legendary, mega + mod)
+								else if (poke.isLegendary)
+									(normal, hidden, legendary + mod, mega)
+								else if (index == abilities.size - 1)
+									(normal, hidden + mod, legendary, mega)
+								else
+									(normal + mod, hidden, legendary, mega)
+							}
+							Some(newStatus)
+						}
 					}
 				}
 			}
@@ -115,8 +123,8 @@ object RandomizeAbilities
 			lazy val mappings = originalAbilities
 				.map { case (ability, weights) => ability -> RandomUtils.weighedRandom(weights) }.toMap
 			
-			// Applies the mappings
-			group.iterator.foreach { _.mapAbilities(mappings) }
+			// Applies the mappings, except for certain pokes
+			group.iterator.foreach { p => if (!notRandomizedPokeNumbers.contains(p.number)) p.mapAbilities(mappings) }
 		}
 	}
 	
