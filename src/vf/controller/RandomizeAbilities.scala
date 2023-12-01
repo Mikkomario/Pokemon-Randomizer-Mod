@@ -31,6 +31,9 @@ object RandomizeAbilities
 	private val weakWeight = 0.3
 	private val negativeWeight = 0.6
 	
+	// NB: For logging later
+	// romHandler.abilityName(pkmn.ability1)
+	
 	// Intended to be called after types have been randomized
 	def all(groups: Iterable[EvolveGroup])(implicit rom: RomHandler) = {
 		// Groups the abilities by the number of times they appear for each original poke type

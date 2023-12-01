@@ -4,6 +4,7 @@ import utopia.flow.collection.CollectionExtensions._
 import utopia.flow.collection.immutable.Pair
 import utopia.flow.collection.immutable.range.NumericSpan
 import utopia.flow.util.NotEmpty
+import vf.controller.Settings
 import vf.model.EvolveGroup.assumedFormLevelDuration
 
 object EvolveGroup
@@ -96,6 +97,12 @@ case class EvolveGroup(forms: Vector[Poke], baseForm: Option[Poke] = None, megas
 	lazy val evos = (baseForm.toVector ++ forms).paired
 		.foldLeft(Vector[Evo]()) { (evos, formPair) => evos ++ formPair.merge { _ evoTo _ } }
 	
+	/**
+	 * A custom-assigned favouriteness -level for this evolve-group where 0 is not favourite, 1 is preferred, and
+	 * > 1 is very favored
+	 */
+	lazy val favouriteLevel = Settings.favouriteLevelOf(this)
+	
 	
 	// COMPUTED -------------------------
 	
@@ -104,6 +111,9 @@ case class EvolveGroup(forms: Vector[Poke], baseForm: Option[Poke] = None, megas
 	def firstForm = forms.head
 	def finalForm = forms.last
 	
+	/**
+	 * @return An iterator that returns all forms of this poke (including megas) from the lowest to highes
+	 */
 	def iterator = forms.iterator ++ megas.iterator
 	def finalToBaseIterator = forms.reverseIterator
 	def megaToBaseIterator = megas.iterator ++ finalToBaseIterator

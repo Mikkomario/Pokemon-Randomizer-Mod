@@ -1,15 +1,28 @@
 package vf.controller
 
 import com.dabomstew.pkrandom.Settings
+import com.dabomstew.pkrandom.pokemon.{Evolution, Pokemon}
 import com.dabomstew.pkrandom.romhandlers.RomHandler
 import vf.model.{EvolveGroup, Moves, Pokes}
+
+object JavaRandomizationContext
+{
+	def apply(romHandler: RomHandler, settings: Settings) = {
+		implicit val rom: RomHandler = romHandler
+		implicit val s: Settings = settings
+		// The eviolites need to be processed before any other operation is initiated
+		val eviolites = ProcessEviolites.preprocess()
+		new JavaRandomizationContext(eviolites)
+	}
+}
 
 /**
  * Tracks data collected during the randomization process
  * @author Mikko Hilpinen
  * @since 7.7.2023, v1.0-alt
  */
-class JavaRandomizationContext(implicit romHandler: RomHandler, settings: Settings)
+class JavaRandomizationContext(eviolites: Map[Pokemon, Vector[Evolution]])
+                              (implicit romHandler: RomHandler, settings: Settings)
 {
 	// ATTRIBUTES   ---------------------
 	
@@ -45,7 +58,11 @@ class JavaRandomizationContext(implicit romHandler: RomHandler, settings: Settin
 		ReflectTypeChangesInStats()
 	}
 	def randomizeAbilities() = RandomizeAbilities.all(evolveGroups)
-	def randomizeStats() = RandomizeStats.all(evolveGroups)
+	def randomizeStats() = {
+		// Applies the eviolite stat changes before the randomization, so that they make more sense in the game's context
+		ProcessEviolites.stats(eviolites, groupByNumber)
+		RandomizeStats.all(evolveGroups)
+	}
 	def makeEvolvesEasier() = MakeEvolvesEasier.all(evolveGroups)
 	def randomizeStarters() = starterMapping = RandomizeStarters(evolveGroups, groupByNumber)
 	def randomizeWildEncounters() = {

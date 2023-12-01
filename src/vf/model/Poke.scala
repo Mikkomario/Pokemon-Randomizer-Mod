@@ -5,6 +5,7 @@ import com.dabomstew.pkrandom.romhandlers.RomHandler
 import utopia.flow.collection.CollectionExtensions._
 import utopia.flow.collection.immutable.Pair
 import utopia.flow.view.mutable.caching.ResettableLazy
+import vf.controller.Settings
 
 import scala.jdk.CollectionConverters._
 import scala.language.implicitConversions
@@ -27,6 +28,11 @@ class Poke(val wrapped: Pokemon, val cosmeticForms: Vector[Pokemon] = Vector())(
 	 * The state of this Poke as first encountered (should be the Poke's original, unmodified state)
 	 */
 	val originalState = PokeState.from(wrapped)
+	
+	/**
+	 * Whether this is an "eviolite" poke, which shouldn't evolve
+	 */
+	lazy val isEviolitePoke = Settings.isEviolitePoke(this)
 	
 	private val stateCache = ResettableLazy { PokeState.from(wrapped) }
 	
@@ -128,6 +134,8 @@ class Poke(val wrapped: Pokemon, val cosmeticForms: Vector[Pokemon] = Vector())(
 		stats.mergeWith(values.reverse)(update)
 	}
 	def mapStat(stat: PokeStat)(f: Int => Int) = update(stat, f(apply(stat)))
+	def scaleStats(scalingMod: Double) = PokeStat.values
+		.foreach { stat => mapStat(stat) { s => (s * scalingMod).round.toInt } }
 	
 	// Makes the specified item appear as a held item (as commonly as possible)
 	def giveItem(item: Int) = {

@@ -14,7 +14,8 @@ import java.io.PrintWriter
  */
 object ReflectTypeChangesInStats
 {
-	private val changeAdjustment = Adjustment(0.12)
+	private val leftTypeAdjustment = Adjustment(0.06)
+	private val acquiredTypeAdjustment = Adjustment(0.12)
 	private val staticAdjustment = Adjustment(0.04)
 	
 	private val typeStatImpact = Map[PokeType, Map[PokeStat, Int]](
@@ -120,9 +121,11 @@ object ReflectTypeChangesInStats
 			val fromImpact = typeStatImpact.getOrElse(fromType, Map())
 			val toImpact = typeStatImpact.getOrElse(toType, Map())
 			PokeStat.values.foreach { stat =>
-				val change = toImpact.getOrElse(stat, 0) - fromImpact.getOrElse(stat, 0)
-				if (change != 0)
-					poke.mapStat(stat) { s => (s * changeAdjustment(change)).round.toInt }
+				val fromEffect = leftTypeAdjustment(fromImpact.getOrElse(stat, 0).toDouble)
+				val toEffect = acquiredTypeAdjustment(toImpact.getOrElse(stat, 0).toDouble)
+				val totalEffect = fromEffect + toEffect
+				if (totalEffect != 0)
+					poke.mapStat(stat) { s => (s * totalEffect).round.toInt }
 			}
 		}
 		// In addition, applies a small portion to the resulting types, regardless of whether they changed or not

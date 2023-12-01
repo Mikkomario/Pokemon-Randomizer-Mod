@@ -161,7 +161,7 @@ public class Randomizer {
             romHandler.standardizeEXPCurves(settings);
         }
 
-        JavaRandomizationContext context = new JavaRandomizationContext(romHandler, settings);
+        JavaRandomizationContext context = JavaRandomizationContext.apply(romHandler, settings);
 
         // Pokemon Types
         if (settings.getTypesMod() != Settings.TypesMod.UNCHANGED) {
