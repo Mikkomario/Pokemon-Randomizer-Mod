@@ -4,18 +4,18 @@ import com.dabomstew.pkrandom.pokemon.{CriticalChance, MoveCategory, Pokemon}
 import com.dabomstew.pkrandom.romhandlers.RomHandler
 import utopia.flow.collection.CollectionExtensions._
 import utopia.vault.database.Connection
-import vf.model.{MoveLearn, Moves, Poke, Pokes, WildEncounter}
+import vf.model._
 import vf.poke.core.database.access.many.game.ability.DbAbilities
 import vf.poke.core.database.access.many.game.item.DbItems
 import vf.poke.core.database.access.single.game.DbGame
 import vf.poke.core.database.model.game.{AbilityModel, GameModel, ItemModel}
-import vf.poke.core.database.model.poke.{EvoModel, EvoMoveModel, MoveLearnModel, PokeAbilityModel, PokeModel, PokeStatModel}
-import vf.poke.core.database.model.randomization.{BattleEncounterModel, MoveModel, RandomizationModel, WildEncounterModel}
+import vf.poke.core.database.model.poke._
+import vf.poke.core.database.model.randomization._
 import vf.poke.core.model.enumeration.CriticalRate.{Guaranteed, Increased, Normal}
 import vf.poke.core.model.enumeration.MoveCategory.{Physical, Special}
 import vf.poke.core.model.partial.game.{AbilityData, GameData, ItemData}
-import vf.poke.core.model.partial.poke.{EvoData, EvoMoveData, MoveLearnData, PokeAbilityData, PokeData, PokeStatData}
-import vf.poke.core.model.partial.randomization.{BattleEncounterData, MoveData, RandomizationData, WildEncounterData}
+import vf.poke.core.model.partial.poke._
+import vf.poke.core.model.partial.randomization._
 import vf.util.PokeExtensions._
 
 object RecordToDb
@@ -155,6 +155,14 @@ class RecordToDb(gameId: Int, randomizationId: Int)(implicit rom: RomHandler)
 		}
 		MoveLearnModel.insert(levelMoveData)
 		EvoMoveModel.insert(evoMoveData)
+	}
+	
+	def starters(starterTrios: Vector[Vector[Poke]])(implicit connection: Connection) = {
+		val setIds = StarterSetModel.insert(starterTrios.indices.map { i => StarterSetData(randomizationId, i) })
+			.map { _.id }
+		StarterAssignmentModel.insert(starterTrios.zip(setIds).flatMap { case (pokes, setId) =>
+			pokes.zipWithIndex.map { case (poke, index) => StarterAssignmentData(setId, idOf(poke), index) }
+		})
 	}
 	
 	def wildEncounters(encounters: Iterable[WildEncounter])(implicit connection: Connection) = {

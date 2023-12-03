@@ -699,6 +699,8 @@ public class Randomizer {
         // Record check value?
         romHandler.writeCheckValueToROM(checkValue);
 
+        context.record();
+
         // Save
         if (saveAsDirectory) {
             romHandler.saveRomDirectory(filename);

@@ -3,7 +3,9 @@ package vf.controller
 import com.dabomstew.pkrandom.Settings
 import com.dabomstew.pkrandom.pokemon.{Evolution, Pokemon}
 import com.dabomstew.pkrandom.romhandlers.RomHandler
-import vf.model.{EvolveGroup, Moves, Pokes}
+import utopia.flow.collection.CollectionExtensions._
+import vf.model._
+import vf.poke.core.util.Common._
 
 object JavaRandomizationContext
 {
@@ -36,6 +38,12 @@ class JavaRandomizationContext(eviolites: Map[Pokemon, Vector[Evolution]])
 	private var pokeMapping = Map[Int, Vector[EvolveGroup]]()
 	private var minAppearanceLevels = Map[EvolveGroup, Int]().withDefaultValue(1)
 	
+	private var movesByPoke = Map[Poke, Vector[MoveLearn]]()
+	
+	private var starters = Vector[Vector[EvolveGroup]]()
+	private var wildEncounters = Vector[WildEncounter]()
+	private var encounterCounts = Map[Poke, Map[Int, Int]]()
+	
 	
 	// INITIAL CODE ---------------------
 	
@@ -64,16 +72,37 @@ class JavaRandomizationContext(eviolites: Map[Pokemon, Vector[Evolution]])
 		RandomizeStats.all(evolveGroups)
 	}
 	def makeEvolvesEasier() = MakeEvolvesEasier.all(evolveGroups)
-	def randomizeStarters() = starterMapping = RandomizeStarters(evolveGroups, groupByNumber)
+	def randomizeStarters() = {
+		val (mapping, trios) = RandomizeStarters(evolveGroups, groupByNumber)
+		starterMapping = mapping
+		starters = trios
+	}
 	def randomizeWildEncounters() = {
-		val (mapping, appearance) = RandomizeWildEncounters.all(evolveGroups)
+		val (mapping, appearance, encounters) = RandomizeWildEncounters.all(evolveGroups)
 		pokeMapping = mapping
 		minAppearanceLevels = appearance
+		wildEncounters = encounters
 	}
-	def randomizeMoves() = RandomizeMoves.all(evolveGroups, minAppearanceLevels)
+	def randomizeMoves() = movesByPoke = RandomizeMoves.all(evolveGroups, minAppearanceLevels)
 	def randomizeTrainerPokes() = {
-		val encounterCounts = RandomizeBattles.all(groupByNumber, starterMapping, pokeMapping, minAppearanceLevels)
+		encounterCounts = RandomizeBattles.all(groupByNumber, starterMapping, pokeMapping, minAppearanceLevels)
 		// Also balances pokes afterwards based on their types
 		CompensateForType(minAppearanceLevels ++ starterMapping.valuesIterator.map { _ -> 5 }, encounterCounts)
+	}
+	
+	def record() = {
+		cPool.tryWith { implicit c =>
+			println("Recording results to the database")
+			val record = RecordToDb.newRandomization()
+			record.pokes()
+			record.evolves()
+			record.abilities()
+			record.stats()
+			record.moves(movesByPoke)
+			record.starters(starters.map { _.map { _.firstForm } })
+			record.wildEncounters(wildEncounters)
+			record.battles(encounterCounts)
+			println("Results recorded")
+		}.logFailure
 	}
 }

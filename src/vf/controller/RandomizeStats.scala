@@ -23,6 +23,7 @@ object RandomizeStats
 	
 	private val randomizeStatChainChance = 0.7
 	private val randomizeMoreChainChance = 0.7
+	private val randomizeMoreDecrease = 0.1
 	private val adjustment = Adjustment(0.1)
 	private val maxImpact = 5
 	
@@ -34,15 +35,17 @@ object RandomizeStats
 	// Returns modifications made
 	def all(groups: Iterable[EvolveGroup]) = {
 		Log("stats") { writer =>
+			val stateBeforeMod = groups.flatMap { g => g.iterator.map { p => p -> p.state } }.toMap
 			val (modifiers, swaps) = groups.splitFlatMap { apply(_, writer) }
 			// Logs the results, where changed
 			writer.println("\n\n-----------")
 			groups.foreach { group =>
 				val poke = group.finalForm
 				if (poke.originalState.stats != poke.stats) {
-					writer.println(s"${poke.name}: ${ poke.originalState.bst } => ${ poke.bst } BST")
+					val before = stateBeforeMod(poke)
+					writer.println(s"${poke.name}: ${ poke.originalState.bst } => ${ before.bst } => ${ poke.bst } BST")
 					Stat.values.foreach { stat =>
-						writer.println(s"\t- $stat: ${ poke.originalState(stat) } => ${ poke(stat) }")
+						writer.println(s"\t- $stat: ${ poke.originalState(stat) } => ${ before(stat) } => ${ poke(stat) }")
 					}
 				}
 			}
@@ -54,27 +57,31 @@ object RandomizeStats
 	def apply(group: EvolveGroup, writer: PrintWriter) = {
 		writer.println(s"\nProcessing $group\t----------------")
 		// Modifies n stats by n%
+		// The first modifications, up to the group's "favouriteness" level are guaranteed to be positive
+		// After these, there will be a guaranteed negative mod as well
+		// Legendaries get one less guaranteed positive rolls
+		val guaranteedPositiveRollsCount = group.favouriteLevel + (if (group.forms.exists { _.isLegendary }) 0 else 1)
 		var modsApplied = 0
 		val modifiers = Iterator
 			.continually {
 				// Randomizes a random amount (using chaining)
 				var impact = 1
-				while (RandomSource.nextDouble() < randomizeMoreChainChance && impact < maxImpact) {
+				while (RandomSource.nextDouble() < randomizeMoreChainChance - randomizeMoreDecrease * (impact - 1) &&
+					impact < maxImpact)
+				{
 					impact += 1
 				}
-				// The first modifications, up to the group's "favouriteness" level are guaranteed to be positive
-				// After these, there will be a guaranteed negative mod as well
-				modsApplied += 1
 				val direction = {
-					if (modsApplied < group.favouriteLevel)
+					if (modsApplied < guaranteedPositiveRollsCount)
 						Positive
-					else if (modsApplied == group.favouriteLevel)
+					else if (modsApplied == guaranteedPositiveRollsCount)
 						Negative
 					else if (RandomSource.nextBoolean())
 						Positive
 					else
 						Negative
 				}
+				modsApplied += 1
 				val mod = adjustment(direction * impact)
 				// Randomizes a random stat
 				Stat.values.random -> mod

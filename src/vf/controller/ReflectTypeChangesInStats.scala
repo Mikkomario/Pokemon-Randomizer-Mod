@@ -1,10 +1,10 @@
 package vf.controller
 
 import utopia.paradigm.transform.Adjustment
-import vf.model.{Poke, PokeStatAccess, Pokes}
-import vf.poke.core.model.enumeration.{PokeType, Stat}
+import vf.model.{Poke, Pokes}
 import vf.poke.core.model.enumeration.PokeType._
 import vf.poke.core.model.enumeration.Stat._
+import vf.poke.core.model.enumeration.{PokeType, Stat}
 
 import java.io.PrintWriter
 
@@ -98,6 +98,12 @@ object ReflectTypeChangesInStats
 			Speed -> -1,
 			Attack -> -1
 		),
+		Ice -> Map(
+			SpecialAttack -> 2,
+			Attack -> 1,
+			Defense -> -2,
+			SpecialDefense -> -1
+		),
 		Fire -> Map(
 			Attack -> 1,
 			SpecialAttack -> 1,
@@ -122,9 +128,9 @@ object ReflectTypeChangesInStats
 			val fromImpact = typeStatImpact.getOrElse(fromType, Map())
 			val toImpact = typeStatImpact.getOrElse(toType, Map())
 			Stat.values.foreach { stat =>
-				val fromEffect = leftTypeAdjustment(fromImpact.getOrElse(stat, 0).toDouble)
+				val fromEffect = leftTypeAdjustment(-fromImpact.getOrElse(stat, 0).toDouble)
 				val toEffect = acquiredTypeAdjustment(toImpact.getOrElse(stat, 0).toDouble)
-				val totalEffect = fromEffect + toEffect
+				val totalEffect = fromEffect * toEffect
 				if (totalEffect != 0)
 					poke.mapStat(stat) { s => (s * totalEffect).round.toInt }
 			}

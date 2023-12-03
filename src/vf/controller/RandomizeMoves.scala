@@ -61,6 +61,7 @@ object RandomizeMoves
 	// OTHER    -------------------------
 	
 	// Randomizes moves for all pokemon
+	// Returns the assigned moves for each poke
 	def all(groups: Iterable[EvolveGroup], minAppearanceLevels: Map[EvolveGroup, Int])
 	       (implicit rom: RomHandler, pokes: Pokes, moves: Moves, settings: Settings) =
 	{
@@ -69,9 +70,9 @@ object RandomizeMoves
 			val originalMovesLearnt = rom.getMovesLearnt
 			val newMovesBuilder = new java.util.HashMap[Integer, java.util.List[MoveLearnt]]()
 			// Randomizes moves for all pokemon
-			groups.foreach { group =>
+			val movesPerPoke = groups.flatMap { group =>
 				val minAppearanceLevel = minAppearanceLevels.get(group)
-				group.levelThresholds.foreach { case (poke, evolveLevel) =>
+				group.levelThresholds.map { case (poke, evolveLevel) =>
 					// Takes a note of the first level at which this poke realistically appears
 					// Either after evolve or in the wild (if a randomized wild poke)
 					val firstLevel = minAppearanceLevel match {
@@ -79,11 +80,12 @@ object RandomizeMoves
 						case None => evolveLevel
 					}
 					val moveListBuilder = new util.ArrayList[MoveLearnt]()
-					apply(poke, firstLevel, group.favouriteLevel, writer)
-						.foreach { move => moveListBuilder.add(move.toMoveLearnt) }
+					val movesLearnt = apply(poke, firstLevel, group.favouriteLevel, writer)
+					movesLearnt.foreach { move => moveListBuilder.add(move.toMoveLearnt) }
 					newMovesBuilder.put(poke.number, moveListBuilder)
+					poke -> movesLearnt
 				}
-			}
+			}.toMap
 			// Makes sure cosmetic forms have the same moves as their base forms
 			pokes.cosmeticForms.foreach { cosmeticPoke =>
 				if (originalMovesLearnt.containsKey(cosmeticPoke.number: Integer) &&
@@ -110,6 +112,7 @@ object RandomizeMoves
 			// Applies the new moves
 			rom.setMovesLearnt(newMovesBuilder)
 			pokes.foreach { _.updateState() }
+			movesPerPoke
 		}
 	}
 	
@@ -287,7 +290,7 @@ object RandomizeMoves
 				.map { case (level, move) => MoveLearn(level, move.number) })
 		val finalMoves = {
 			val realisticMovesCount = standardMoves.count { _.level >= firstLevel }
-			val addedMoveCount = ((realisticMovesCount - minMovesCount) max 0) +
+			val addedMoveCount = ((minMovesCount - realisticMovesCount) max 0) +
 				additionalMovesPerFavouriteLevel * favouriteLevel
 			// Case: Additional moves are not needed
 			if (addedMoveCount <= 0) {

@@ -22,7 +22,7 @@ object RandomizeStarters
 	 * Randomizes the starters in the game
 	 * @param groups All available evolve-groups
 	 * @param rom Implicit ROM
-	 * @return Mapping from the original evolve groups to the replacement groups
+	 * @return Mapping from the original evolve groups to the replacement groups + assigned starter trios
 	 */
 	def apply(groups: Seq[EvolveGroup], groupByNumber: Map[Int, EvolveGroup])(implicit rom: RomHandler) =
 	{
@@ -132,7 +132,7 @@ object RandomizeStarters
 			if (options.isEmpty) {
 				println("\nWARNING: No starters are possible")
 				writer.println("No starters are possible!")
-				Map[EvolveGroup, EvolveGroup]()
+				Map[EvolveGroup, EvolveGroup]() -> Vector()
 			}
 			else {
 				// Makes sure the number of starters matches the game rules
@@ -214,11 +214,14 @@ object RandomizeStarters
 					additionalGroups.foreach { group => writer.println(s"\t- $group") }
 				}
 				
-				// Returns a mapping for the original vs. new starters
-				originalStarterNumbers.zip(appliedStarterGroups).map { case (originalStarterNumber, newGroup) =>
-					val originalGroup = groupByNumber(originalStarterNumber)
-					originalGroup -> newGroup
-				}.toMap
+				// Returns a mapping for the original vs. new starters + assigned starter trios
+				val starterMapping = originalStarterNumbers.zip(appliedStarterGroups)
+					.map { case (originalStarterNumber, newGroup) =>
+						val originalGroup = groupByNumber(originalStarterNumber)
+						originalGroup -> newGroup
+					}
+					.toMap
+				starterMapping -> selectedTrios
 			}
 		}
 	}

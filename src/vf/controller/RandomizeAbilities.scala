@@ -54,37 +54,34 @@ object RandomizeAbilities
 			// Because group pokes may repeat info, decreases the impact
 			val mod = 1.0 / group.size
 			group.iterator.foreach { poke =>
-				// There are certain form-related abilities that shouldn't get randomized
-				if (!notRandomizedPokeNumbers.contains(poke.number)) {
-					val types = poke.originalState.types
-					val abilities = poke.originalState.abilities
-						// Applies ROM-specific restrictions
-						.take(rom.abilitiesPerPokemon()).filter { _._1 <= rom.highestAbilityIndex() }
-					abilities.foreach { case (ability, isHidden) =>
-						val primaryMap = typeAbilityCounts(types.primary)
-						// Adds more emphasis on the primary type for dual types
-						types.secondary match {
-							case Some(secondaryType) =>
-								primaryMap(ability) = primaryMap.getOrElse(ability, 0.0) + mod * 0.7
-								val secondaryMap = typeAbilityCounts(secondaryType)
-								secondaryMap(ability) = secondaryMap.getOrElse(ability, 0.0) + mod * 0.3
-							case None => primaryMap(ability) = primaryMap.getOrElse(ability, 0.0) + mod
+				val types = poke.originalState.types
+				val abilities = poke.originalState.abilities
+					// Applies ROM-specific restrictions
+					.take(rom.abilitiesPerPokemon()).filter { _._1 <= rom.highestAbilityIndex() }
+				abilities.foreach { case (ability, isHidden) =>
+					val primaryMap = typeAbilityCounts(types.primary)
+					// Adds more emphasis on the primary type for dual types
+					types.secondary match {
+						case Some(secondaryType) =>
+							primaryMap(ability) = primaryMap.getOrElse(ability, 0.0) + mod * 0.7
+							val secondaryMap = typeAbilityCounts(secondaryType)
+							secondaryMap(ability) = secondaryMap.getOrElse(ability, 0.0) + mod * 0.3
+						case None => primaryMap(ability) = primaryMap.getOrElse(ability, 0.0) + mod
+					}
+					// Records ability context
+					abilityContextCounts.updateWith(ability) { prev =>
+						val (normal, hidden, legendary, mega) = prev.getOrElse((0.0, 0.0, 0.0, 0.0))
+						val newStatus = {
+							if (poke.isMega)
+								(normal, hidden, legendary, mega + mod)
+							else if (poke.isLegendary)
+								(normal, hidden, legendary + mod, mega)
+							else if (isHidden || abilities.size == 1)
+								(normal, hidden + mod, legendary, mega)
+							else
+								(normal + mod, hidden, legendary, mega)
 						}
-						// Records ability context
-						abilityContextCounts.updateWith(ability) { prev =>
-							val (normal, hidden, legendary, mega) = prev.getOrElse((0.0, 0.0, 0.0, 0.0))
-							val newStatus = {
-								if (poke.isMega)
-									(normal, hidden, legendary, mega + mod)
-								else if (poke.isLegendary)
-									(normal, hidden, legendary + mod, mega)
-								else if (isHidden || abilities.size == 1)
-									(normal, hidden + mod, legendary, mega)
-								else
-									(normal + mod, hidden, legendary, mega)
-							}
-							Some(newStatus)
-						}
+						Some(newStatus)
 					}
 				}
 			}

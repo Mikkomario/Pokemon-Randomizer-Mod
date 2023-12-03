@@ -40,6 +40,7 @@ object RandomizeBattles
 	
 	// OTHER    --------------------------
 	
+	// FIXME: Early magicarp battles may match to "gyarados" pokes because min appearance level sanity is not applied on poke-to-poke basis
 	def all(allGroups: Map[Int, EvolveGroup], starterMapping: Map[EvolveGroup, EvolveGroup],
 	        pokeMapping: Map[Int, Vector[EvolveGroup]], minAppearanceLevels: Map[EvolveGroup, Int])
 	       (implicit rom: RomHandler, settings: Settings) =

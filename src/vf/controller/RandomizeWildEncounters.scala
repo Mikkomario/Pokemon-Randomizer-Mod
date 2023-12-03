@@ -28,8 +28,8 @@ object RandomizeWildEncounters
 	// How many random pokes should appear for each original poke
 	private val pokeToRandomRatio = 2
 	
-	private val allowedWildBstRange = NumericSpan(0.8, 1.3)
-	private val allowedFinalBstRange = NumericSpan(0.7, 1.6)
+	private val allowedWildBstRange = NumericSpan(0.7, 1.4)
+	private val allowedFinalBstRange = NumericSpan(0.6, 1.6)
 	private val allowedBstRanges = Pair(allowedWildBstRange, allowedFinalBstRange)
 	private val bstDiffWeightMods = Pair(0.5, 0.25)
 	
@@ -46,7 +46,7 @@ object RandomizeWildEncounters
 	
 	// OTHER    -----------------------------
 	
-	// Returns the poke-mapping and the lowest appearance levels of each poke-group
+	// Returns the poke-mapping and the lowest appearance levels of each poke-group + all encounters
 	def all(evolveGroups: Iterable[EvolveGroup])
 	       (implicit rom: RomHandler, settings: Settings, pokes: Pokes) =
 	{
@@ -203,7 +203,8 @@ object RandomizeWildEncounters
 			rom.setEncounters(useTimeOfDay, baseEncounters)
 			
 			// Returns the poke-mapping and the lowest appearance levels of each poke-group
-			pokeMapping.view.mapValues { _.map { _._1._1 } }.toMap -> lowestAppearanceLevels
+			// As well as the encounter data
+			(pokeMapping.view.mapValues { _.map { _._1._1 } }.toMap, lowestAppearanceLevels, allEncounters)
 		}
 	}
 	

@@ -15,6 +15,7 @@ import scala.jdk.CollectionConverters._
  * @author Mikko Hilpinen
  * @since 3.7.2023, v1.0-alt
  */
+// FIXME: Now it is possible to add the primary type as a secondary type, also, type changes are a bit too rare
 object RandomizeTypes
 {
 	// ATTRIBUTES   -----------------------

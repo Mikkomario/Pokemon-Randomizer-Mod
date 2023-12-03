@@ -32,7 +32,8 @@ object ProcessEviolites
 	 */
 	def preprocess()(implicit rom: RomHandler) = {
 		Log("eviolites-prepare") { writer =>
-			rom.getPokemonInclFormes.iterator().asScala.filter { p => Settings.isEviolitePoke(p.name) }
+			rom.getPokemonInclFormes.iterator().asScala
+				.flatMap { Option(_) }.filter { p => Settings.isEviolitePoke(p.name) }
 				.map { poke =>
 					// Removes the evolves from the eviolite poke, as well as from the evolved form
 					// This will result in the forms becoming separate evolve-groups
@@ -73,7 +74,7 @@ object ProcessEviolites
 	         (implicit pokes: Pokes) =
 	{
 		Log("eviolites-apply") { writer =>
-			eviolites.foreach { case (pokemon, evolved) =>
+			eviolites.filter { _._2.nonEmpty }.foreach { case (pokemon, evolved) =>
 				val poke = pokes(pokemon)
 				val evolveGroup = evolveGroupsByNumber(poke.number)
 				val evolvedForms = evolved.map { evo => pokes(evo.to) }
