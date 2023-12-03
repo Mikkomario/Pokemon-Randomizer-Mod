@@ -5,9 +5,11 @@ import utopia.flow.collection.CollectionExtensions._
 import utopia.flow.collection.immutable.caching.cache.Cache
 import utopia.flow.collection.immutable.{Graph, Pair}
 import utopia.flow.util.NotEmpty
-import vf.model.PokeType.{Bug, Dark, Dragon, Electric, Fairy, Fighting, Fire, Flying, Ghost, Grass, Ground, Ice, Normal, Poison, Psychic, Rock, Steel, Water}
+import vf.poke.core.model.enumeration.PokeType._
 import vf.model.TypeRelation.{Relative, StrongRelative, Unrelated, WeakRelative}
+import vf.poke.core.model.enumeration.PokeType
 import vf.util.RandomUtils._
+import vf.util.PokeExtensions._
 
 object TypeRelations
 {

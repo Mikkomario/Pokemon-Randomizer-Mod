@@ -2,14 +2,15 @@ package vf.model
 
 import com.dabomstew.pkrandom.RandomSource
 import com.dabomstew.pkrandom.pokemon.Pokemon
-import vf.model.PokeStat.maxValue
+import vf.model.PokeStatAccess.maxValue
 
 /**
  * Enumeration for pokemon stats, such as attack and defence
  * @author Mikko Hilpinen
  * @since 7.7.2023, v1.0-alt
  */
-sealed trait PokeStat
+@deprecated("Please use Stat and PokeExtensions instead", "v1.0")
+sealed trait PokeStatAccess
 {
 	// ABSTRACT --------------------
 	
@@ -26,7 +27,7 @@ sealed trait PokeStat
 	// COMPUTED -------------------
 	
 	def otherRandom = {
-		val options = PokeStat.values.filterNot { _ == this }
+		val options = PokeStatAccess.values.filterNot { _ == this }
 		options(RandomSource.nextInt(options.size))
 	}
 	
@@ -36,13 +37,14 @@ sealed trait PokeStat
 	def to(poke: Pokemon, value: Int) = _to(poke, (value min maxValue) max minimumValue)
 }
 
-object PokeStat
+@deprecated("Please use Stat and PokeExtensions instead", "v1.0")
+object PokeStatAccess
 {
 	// ATTRIBUTES   ---------------
 	
 	val maxValue = 255
 	
-	val values = Vector[PokeStat](Hp, Attack, SpecialAttack, Defense, SpecialDefense, Speed)
+	val values = Vector[PokeStatAccess](Hp, Attack, SpecialAttack, Defense, SpecialDefense, Speed)
 	
 	
 	// COMPUTED -------------------
@@ -52,37 +54,37 @@ object PokeStat
 	
 	// VALUES   -------------------
 	
-	case object Hp extends PokeStat
+	case object Hp extends PokeStatAccess
 	{
 		override def minimumValue: Int = 20
 		override def of(poke: Pokemon): Int = poke.hp
 		override protected def _to(poke: Pokemon, value: Int): Unit = poke.hp = value
 	}
-	case object Attack extends PokeStat
+	case object Attack extends PokeStatAccess
 	{
 		override def minimumValue: Int = 10
 		override def of(poke: Pokemon): Int = poke.attack
 		override protected def _to(poke: Pokemon, value: Int): Unit = poke.attack = value
 	}
-	case object SpecialAttack extends PokeStat
+	case object SpecialAttack extends PokeStatAccess
 	{
 		override def minimumValue: Int = 10
 		override def of(poke: Pokemon): Int = poke.spatk
 		override protected def _to(poke: Pokemon, value: Int): Unit = poke.spatk = value
 	}
-	case object Defense extends PokeStat
+	case object Defense extends PokeStatAccess
 	{
 		override def minimumValue: Int = 10
 		override def of(poke: Pokemon): Int = poke.defense
 		override protected def _to(poke: Pokemon, value: Int): Unit = poke.defense = value
 	}
-	case object SpecialDefense extends PokeStat
+	case object SpecialDefense extends PokeStatAccess
 	{
 		override def minimumValue: Int = 10
 		override def of(poke: Pokemon): Int = poke.spdef
 		override protected def _to(poke: Pokemon, value: Int): Unit = poke.spdef = value
 	}
-	case object Speed extends PokeStat
+	case object Speed extends PokeStatAccess
 	{
 		override def minimumValue: Int = 10
 		override def of(poke: Pokemon): Int = poke.speed

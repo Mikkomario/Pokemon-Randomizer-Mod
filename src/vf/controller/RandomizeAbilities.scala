@@ -3,7 +3,8 @@ package vf.controller
 import com.dabomstew.pkrandom.constants.{Abilities, GlobalConstants, Species}
 import com.dabomstew.pkrandom.romhandlers.RomHandler
 import utopia.flow.collection.CollectionExtensions._
-import vf.model.{EvolveGroup, PokeType}
+import vf.model.EvolveGroup
+import vf.poke.core.model.enumeration.PokeType
 import vf.util.RandomUtils
 
 import scala.collection.mutable
@@ -58,8 +59,8 @@ object RandomizeAbilities
 					val types = poke.originalState.types
 					val abilities = poke.originalState.abilities
 						// Applies ROM-specific restrictions
-						.take(rom.abilitiesPerPokemon()).filter { _ <= rom.highestAbilityIndex() }
-					abilities.zipWithIndex.foreach { case (ability, index) =>
+						.take(rom.abilitiesPerPokemon()).filter { _._1 <= rom.highestAbilityIndex() }
+					abilities.foreach { case (ability, isHidden) =>
 						val primaryMap = typeAbilityCounts(types.primary)
 						// Adds more emphasis on the primary type for dual types
 						types.secondary match {
@@ -77,7 +78,7 @@ object RandomizeAbilities
 									(normal, hidden, legendary, mega + mod)
 								else if (poke.isLegendary)
 									(normal, hidden, legendary + mod, mega)
-								else if (index == abilities.size - 1)
+								else if (isHidden || abilities.size == 1)
 									(normal, hidden + mod, legendary, mega)
 								else
 									(normal + mod, hidden, legendary, mega)
@@ -117,7 +118,7 @@ object RandomizeAbilities
 			val originalAbilities = group.iterator
 				.flatMap { p =>
 					val level = if (p.isMega) megaWeights else if (p.isLegendary) legendWeights else baseWeights
-					p.abilities.map { _ -> level }
+					p.abilities.map { _._1 -> level }
 				}
 				.toSet.filterNot { _._1 == Abilities.wonderGuard }
 			lazy val mappings = originalAbilities

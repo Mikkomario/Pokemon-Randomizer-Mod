@@ -2,11 +2,12 @@ package vf.model
 
 import com.dabomstew.pkrandom.pokemon.{EvolutionType, Pokemon}
 import utopia.flow.collection.immutable.Pair
-import vf.model.EvoLike.stoneTypes
+import vf.model.EvoLike.{itemTypes, stoneTypes}
 
 object EvoLike
 {
 	val stoneTypes = Set(EvolutionType.STONE, EvolutionType.STONE_MALE_ONLY, EvolutionType.STONE_FEMALE_ONLY)
+	val itemTypes = Set(EvolutionType.LEVEL_ITEM_DAY, EvolutionType.LEVEL_ITEM_NIGHT) ++ stoneTypes
 }
 
 /**
@@ -31,6 +32,9 @@ trait EvoLike
 	def usesLevel: Boolean = evoType.usesLevel()
 	def nonLevelBased = !usesLevel
 	def levelThreshold: Option[Int] = if (usesLevel) Some(extraInfo) else None
+	
+	def involvesItem = itemTypes.contains(evoType)
+	def item = if (involvesItem) Some(extraInfo) else None
 	
 	// Stones & other items are represented with integers
 	def stone: Option[Int] = if (usesStone) Some(extraInfo) else None

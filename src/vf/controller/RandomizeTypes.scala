@@ -4,7 +4,8 @@ import com.dabomstew.pkrandom.RandomSource
 import com.dabomstew.pkrandom.romhandlers.RomHandler
 import utopia.flow.collection.CollectionExtensions._
 import vf.model.TypeRelation.{Relative, StrongRelative, Unrelated, WeakRelative}
-import vf.model.{EvolveGroup, PokeType, TypeRelation, TypeRelations}
+import vf.model.{EvolveGroup, TypeRelation, TypeRelations}
+import vf.poke.core.model.enumeration.PokeType
 
 import java.io.PrintWriter
 import scala.jdk.CollectionConverters._

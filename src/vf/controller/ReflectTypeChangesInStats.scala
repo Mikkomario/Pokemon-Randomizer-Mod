@@ -1,9 +1,10 @@
 package vf.controller
 
 import utopia.paradigm.transform.Adjustment
-import vf.model.{Poke, PokeStat, PokeType, Pokes}
-import vf.model.PokeType._
-import vf.model.PokeStat._
+import vf.model.{Poke, PokeStatAccess, Pokes}
+import vf.poke.core.model.enumeration.{PokeType, Stat}
+import vf.poke.core.model.enumeration.PokeType._
+import vf.poke.core.model.enumeration.Stat._
 
 import java.io.PrintWriter
 
@@ -18,7 +19,7 @@ object ReflectTypeChangesInStats
 	private val acquiredTypeAdjustment = Adjustment(0.12)
 	private val staticAdjustment = Adjustment(0.04)
 	
-	private val typeStatImpact = Map[PokeType, Map[PokeStat, Int]](
+	private val typeStatImpact = Map[PokeType, Map[Stat, Int]](
 		Normal -> Map(
 			Hp -> 2,
 			Attack -> 1,
@@ -120,7 +121,7 @@ object ReflectTypeChangesInStats
 		poke.typeSwaps.foreach { case (fromType, toType) =>
 			val fromImpact = typeStatImpact.getOrElse(fromType, Map())
 			val toImpact = typeStatImpact.getOrElse(toType, Map())
-			PokeStat.values.foreach { stat =>
+			Stat.values.foreach { stat =>
 				val fromEffect = leftTypeAdjustment(fromImpact.getOrElse(stat, 0).toDouble)
 				val toEffect = acquiredTypeAdjustment(toImpact.getOrElse(stat, 0).toDouble)
 				val totalEffect = fromEffect + toEffect
@@ -137,7 +138,7 @@ object ReflectTypeChangesInStats
 		// Logs the changes
 		writer.println(s"\n${poke.name}: ${poke.originalState.types} => ${poke.types}; ${
 			stateBeforeChanges.bst } => ${poke.bst}")
-		PokeStat.values.foreach { stat =>
+		Stat.values.foreach { stat =>
 			val before = stateBeforeChanges(stat)
 			val after = poke(stat)
 			if (before != after)

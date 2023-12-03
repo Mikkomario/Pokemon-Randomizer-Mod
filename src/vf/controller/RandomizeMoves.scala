@@ -7,10 +7,12 @@ import com.dabomstew.pkrandom.{RandomSource, Settings}
 import utopia.flow.collection.CollectionExtensions._
 import utopia.flow.collection.immutable.Pair
 import utopia.flow.collection.immutable.range.{HasInclusiveOrderedEnds, Span}
-import vf.model.PokeStat.{Attack, SpecialAttack}
 import vf.model.TypeRelation.{Relative, StrongRelative, Unrelated, WeakRelative}
 import vf.model._
+import vf.poke.core.model.enumeration.PokeType
+import vf.poke.core.model.enumeration.Stat.{Attack, SpecialAttack}
 import vf.util.RandomUtils._
+import vf.util.PokeExtensions._
 
 import java.io.PrintWriter
 import java.util

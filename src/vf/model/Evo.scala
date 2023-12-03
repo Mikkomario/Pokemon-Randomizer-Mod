@@ -9,7 +9,7 @@ import utopia.flow.view.mutable.caching.ResettableLazy
  * @author Mikko Hilpinen
  * @since 25.11.2023, v1.0-alt
  */
-class Evo(wrapped: Evolution) extends EvoLike
+class Evo(val wrapped: Evolution) extends EvoLike
 {
 	// ATTRIBUTES   ---------------------
 	

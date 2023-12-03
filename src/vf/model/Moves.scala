@@ -3,6 +3,7 @@ package vf.model
 import com.dabomstew.pkrandom.constants.GlobalConstants
 import com.dabomstew.pkrandom.pokemon.{Move, MoveCategory}
 import com.dabomstew.pkrandom.romhandlers.RomHandler
+import vf.util.PokeExtensions._
 
 import scala.jdk.CollectionConverters._
 
@@ -29,7 +30,7 @@ case class Moves(all: Set[Move], banned: Set[Int])
 	
 	lazy val byNumber = all.iterator.map { m => m.number -> m }.toMap
 	
-	lazy val byType = valid.groupBy { m => PokeType.fromJava(m.`type`) }.withDefaultValue(Set())
+	lazy val byType = valid.groupBy { _.`type`.toScala }.withDefaultValue(Set())
 	lazy val byHasStatChange = valid.groupBy { _.hasBeneficialStatChange }.withDefaultValue(Set())
 	lazy val byDamages = valid.groupBy { _.power > 0 }.withDefaultValue(Set())
 	lazy val byCategory = valid.groupBy { _.category }.withDefaultValue(Set())

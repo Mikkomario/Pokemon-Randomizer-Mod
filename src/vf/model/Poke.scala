@@ -6,6 +6,8 @@ import utopia.flow.collection.CollectionExtensions._
 import utopia.flow.collection.immutable.Pair
 import utopia.flow.view.mutable.caching.ResettableLazy
 import vf.controller.Settings
+import vf.poke.core.model.enumeration.{PokeType, Stat}
+import vf.util.PokeExtensions._
 
 import scala.jdk.CollectionConverters._
 import scala.language.implicitConversions
@@ -107,9 +109,9 @@ class Poke(val wrapped: Pokemon, val cosmeticForms: Vector[Pokemon] = Vector())(
 	// IMPLEMENTED  -------------------
 	
 	override def types: TypeSet = state.types
-	override def abilities: Vector[Int] = state.abilities
+	override def abilities: Vector[(Int, Boolean)] = state.abilities
 	override def megaEvos: Pair[Vector[MegaEvolution]] = state.megaEvos
-	override def stats: Map[PokeStat, Int] = state.stats
+	override def stats: Map[Stat, Int] = state.stats
 	override def moves: Vector[MoveLearn] = state.moves
 	
 	
@@ -124,17 +126,17 @@ class Poke(val wrapped: Pokemon, val cosmeticForms: Vector[Pokemon] = Vector())(
 		updateState()
 	}
 	
-	def update(stat: PokeStat, value: Int) = {
-		forms.foreach { p => stat.to(p, value) }
+	def update(stat: Stat, value: Int) = {
+		forms.foreach { _(stat) = value }
 		updateState()
 	}
 	// Swaps two stats with each other
-	def swap(stats: Pair[PokeStat]): Unit = {
+	def swap(stats: Pair[Stat]): Unit = {
 		val values = stats.map(apply)
 		stats.mergeWith(values.reverse)(update)
 	}
-	def mapStat(stat: PokeStat)(f: Int => Int) = update(stat, f(apply(stat)))
-	def scaleStats(scalingMod: Double) = PokeStat.values
+	def mapStat(stat: Stat)(f: Int => Int) = update(stat, f(apply(stat)))
+	def scaleStats(scalingMod: Double) = Stat.values
 		.foreach { stat => mapStat(stat) { s => (s * scalingMod).round.toInt } }
 	
 	// Makes the specified item appear as a held item (as commonly as possible)

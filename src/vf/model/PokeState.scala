@@ -3,6 +3,8 @@ package vf.model
 import com.dabomstew.pkrandom.pokemon.{MegaEvolution, Pokemon}
 import com.dabomstew.pkrandom.romhandlers.RomHandler
 import utopia.flow.collection.immutable.Pair
+import vf.poke.core.model.enumeration.Stat
+import vf.util.PokeExtensions._
 
 import scala.jdk.CollectionConverters._
 
@@ -10,8 +12,9 @@ object PokeState
 {
 	def from(poke: Pokemon)(implicit rom: RomHandler) = apply(
 		types = TypeSet.from(poke),
-		abilities = Vector(poke.ability1, poke.ability2, poke.ability3).filterNot { _ == 0 }.distinct,
-		stats = PokeStat.values.map { s => s -> s.of(poke) }.toMap,
+		abilities = Vector(poke.ability1 -> false, poke.ability2 -> false, poke.ability3 -> true)
+			.filterNot { _._1 == 0 }.distinct,
+		stats = Stat.values.map { s => s -> poke(s) }.toMap,
 		evos = Pair(poke.evolutionsTo, poke.evolutionsFrom).map { _.asScala.toVector.map(EvoState.from) },
 		megaEvos = Pair(poke.megaEvolutionsTo, poke.megaEvolutionsFrom).map { _.asScala.toVector },
 		moves = Option(rom.getMovesLearnt.get(poke.number)) match {
@@ -28,7 +31,7 @@ object PokeState
  * @param evos Evolutions of this poke. First the 'from' evos (i.e. from previous forms)
  *             and second the 'to' evos (i.e. next forms)
  */
-case class PokeState(types: TypeSet, abilities: Vector[Int], stats: Map[PokeStat, Int], evos: Pair[Vector[EvoState]],
+case class PokeState(types: TypeSet, abilities: Vector[(Int, Boolean)], stats: Map[Stat, Int], evos: Pair[Vector[EvoState]],
                      megaEvos: Pair[Vector[MegaEvolution]], moves: Vector[MoveLearn])
 	extends PokeLike[EvoState]
 {

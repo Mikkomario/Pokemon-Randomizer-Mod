@@ -61,11 +61,13 @@ object RandomizeBattles
 						writer)
 				}
 				// Calculates the number of encounters for each poke
-				.toVector.groupMapReduce(Identity) { _ => 1 } { _ + _ }
+				.toVector.asMultiMap
+				.view.mapValues { levels => levels.groupMapReduce(Identity) { _ => 1 } { _ + _ } }.toMap
 			
 			writer.println(s"\nTotal of ${encounterCounts.size} encountered pokes:")
-			encounterCounts.toVector.reverseSortBy { _._2 }.foreach { case (poke, encounters) =>
-				writer.println(s"\t- ${poke.name} (${poke.types} / ${poke.bst} BST): $encounters encounters")
+			encounterCounts.foreach { case (poke, encounters) =>
+				writer.println(s"\t- ${poke.name} (${poke.types} / ${poke.bst} BST): ${
+					encounters.valuesIterator.sum} encounters")
 			}
 			
 			encounterCounts
@@ -78,7 +80,7 @@ object RandomizeBattles
 		encounterCounts
 	}
 	
-	// Returns the selected pokes
+	// Returns the selected pokes and their levels
 	def apply(trainer: Trainer, levelMod: Double, starterMapping: Map[EvolveGroup, EvolveGroup],
 	          pokeMapping: Map[Int, Vector[EvolveGroup]], pokePool: Iterable[EvolveGroup], groups: Map[Int, EvolveGroup],
 	          minAppearanceLevels: Map[EvolveGroup, Int], writer: PrintWriter)
@@ -191,13 +193,13 @@ object RandomizeBattles
 			val maxTotalCount = if (trainer.multiBattleStatus != Trainer.MultiBattleStatus.NEVER) 3 else 6
 			defaultAdditionalPokeCount min (maxTotalCount - selectedOpponents.size)
 		}
-		val trainerPokes = selectedOpponents.map { _._3 }
+		val trainerPokesWithLevels = selectedOpponents.map { case (_, _, poke, level) => poke -> level }
 		if (additionalPokeCount > 0) {
 			val (originalTrainerPokeGroups, trainerPokeLevels) = selectedOpponents
 				.splitMap { case (originalGroup, _, _, level) => (originalGroup, level) }
 			val (additionalPokes, additionalPokeLevel) = selectAdditionalPokes(additionalPokeCount,
-				originalTrainerPokeGroups, trainerPokes, trainerPokeLevels, pokePool, selectedGroups,
-				minAppearanceLevels)
+				originalTrainerPokeGroups, trainerPokesWithLevels.map { _._1 }, trainerPokeLevels, pokePool,
+				selectedGroups, minAppearanceLevels)
 			
 			// Logs
 			writer.println(s"Assigns $additionalPokeCount new pokes:")
@@ -221,10 +223,10 @@ object RandomizeBattles
 				trainer.pokemon.add(secondToLastIndex, tp)
 			}
 			
-			trainerPokes ++ additionalPokes
+			trainerPokesWithLevels ++ additionalPokes.map { _ -> additionalPokeLevel }
 		}
 		else
-			trainerPokes
+			trainerPokesWithLevels
 	}
 	
 	private def findMatchFor(originalGroup: EvolveGroup, level: Int, pool: Iterable[EvolveGroup],

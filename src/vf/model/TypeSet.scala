@@ -4,12 +4,14 @@ import com.dabomstew.pkrandom.RandomSource
 import com.dabomstew.pkrandom.pokemon.Pokemon
 import com.dabomstew.pkrandom.romhandlers.RomHandler
 import utopia.flow.collection.immutable.Pair
+import vf.poke.core.model.enumeration.PokeType
+import vf.util.PokeExtensions._
 
 object TypeSet
 {
 	def from(pokemon: Pokemon) = {
-		val primary = PokeType.fromJava(pokemon.primaryType)
-		apply(primary, Option(pokemon.secondaryType).map(PokeType.fromJava).filterNot { _ == primary })
+		val primary = pokemon.primaryType.toScala
+		apply(primary, Option(pokemon.secondaryType).map { _.toScala }.filterNot { _ == primary })
 	}
 	
 	def apply(primary: PokeType, secondary: PokeType): TypeSet =

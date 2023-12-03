@@ -6,8 +6,9 @@ import utopia.flow.collection.CollectionExtensions._
 import utopia.flow.collection.immutable.Pair
 import utopia.flow.operator.sign.Sign.{Negative, Positive}
 import utopia.paradigm.transform.Adjustment
-import vf.model.PokeStat.Hp
-import vf.model.{EvolveGroup, PokeStat}
+import vf.model.EvolveGroup
+import vf.poke.core.model.enumeration.Stat
+import vf.poke.core.model.enumeration.Stat._
 
 import java.io.PrintWriter
 
@@ -40,7 +41,7 @@ object RandomizeStats
 				val poke = group.finalForm
 				if (poke.originalState.stats != poke.stats) {
 					writer.println(s"${poke.name}: ${ poke.originalState.bst } => ${ poke.bst } BST")
-					PokeStat.values.foreach { stat =>
+					Stat.values.foreach { stat =>
 						writer.println(s"\t- $stat: ${ poke.originalState(stat) } => ${ poke(stat) }")
 					}
 				}
@@ -76,7 +77,7 @@ object RandomizeStats
 				}
 				val mod = adjustment(direction * impact)
 				// Randomizes a random stat
-				PokeStat.random -> mod
+				Stat.values.random -> mod
 			}
 			// Randomizes a random number of stats
 			.takeWhile { _ => RandomSource.nextDouble() < randomizeStatChainChance }
@@ -92,13 +93,13 @@ object RandomizeStats
 		val statAssignments = {
 			val defaultSwaps = Iterator
 				.continually {
-					val from = PokeStat.random
+					val from = Stat.values.random
 					val to = from.otherRandom
 					Pair(from, to)
 				}
 				.takeWhile { _ => RandomSource.nextDouble() < shuffleStatChainChance }
 				// Forms a map of the assignments
-				.foldLeft(PokeStat.values.map { s => s -> s }.toMap) { (stats, swap) =>
+				.foldLeft(Stat.values.map { s => s -> s }.toMap) { (stats, swap) =>
 					val actualSwaps = Pair(swap, swap.reverse).map { swap => swap.first -> stats(swap.second) }.toMap
 					stats ++ actualSwaps
 				}
@@ -122,20 +123,20 @@ object RandomizeStats
 		group.iterator.foreach { poke =>
 			statAssignments.foreach { swap => poke.swap(Pair.tupleToPair(swap)) }
 			modifiers.foreachEntry { (stat, mod) =>
-				poke.mapStat(stat) { v => ((v * mod).toInt max stat.minimumValue) min PokeStat.maxValue }
+				poke.mapStat(stat) { v => ((v * mod).toInt max stat.minimumValue) min Stat.maxValue }
 			}
 		}
 		
 		// Returns the applied modifications
 		val modifiersToReturn = {
 			if (modifiers.isEmpty)
-				Map[Int, Map[PokeStat, Double]]()
+				Map[Int, Map[Stat, Double]]()
 			else
 				group.iterator.map { _.number -> modifiers }.toMap
 		}
 		val assignmentsToReturn = {
 			if (statAssignments.isEmpty)
-				Map[Int, Map[PokeStat, PokeStat]]()
+				Map[Int, Map[Stat, Stat]]()
 			else
 				group.iterator.map { _.number -> statAssignments }.toMap
 		}

@@ -4,7 +4,8 @@ import com.dabomstew.pkrandom.constants.{Abilities, GlobalConstants}
 import com.dabomstew.pkrandom.pokemon.MegaEvolution
 import utopia.flow.collection.immutable.Pair
 import vf.model.PokeLike.{badAbilities, negativeAbilities, wg}
-import vf.model.PokeStat.{Attack, SpecialAttack}
+import vf.poke.core.model.enumeration.Stat
+import vf.poke.core.model.enumeration.Stat.{Attack, SpecialAttack}
 
 import scala.jdk.CollectionConverters._
 
@@ -27,9 +28,10 @@ trait PokeLike[+E <: EvoLike] extends EvoAccess[E]
 	def types: TypeSet
 	/**
 	 * @return All (0-3) abilities of this poke. Abilities are represented with integers.
+	 *         The second value indicates whether the ability is hidden.
 	 */
-	def abilities: Vector[Int]
-	def stats: Map[PokeStat, Int]
+	def abilities: Vector[(Int, Boolean)]
+	def stats: Map[Stat, Int]
 	def megaEvos: Pair[Vector[MegaEvolution]]
 	def moves: Vector[MoveLearn]
 	
@@ -40,9 +42,9 @@ trait PokeLike[+E <: EvoLike] extends EvoAccess[E]
 	def secondaryType = types.secondary
 	
 	def abilityPowerMod = {
-		val abil = abilities
+		val abil = abilities.map { _._1 }
 		if (abil.nonEmpty) {
-			val powerSum = abilities.map { ability =>
+			val powerSum = abil.map { ability =>
 				if (negativeAbilities.contains(ability))
 					0.65
 				else if (badAbilities.contains(ability))
@@ -85,5 +87,5 @@ trait PokeLike[+E <: EvoLike] extends EvoAccess[E]
 	
 	// OTHER    ----------------------
 	
-	def apply(stat: PokeStat) = stats(stat)
+	def apply(stat: Stat) = stats(stat)
 }

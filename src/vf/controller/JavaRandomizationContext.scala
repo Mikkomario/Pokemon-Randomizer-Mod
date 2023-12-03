@@ -74,8 +74,6 @@ class JavaRandomizationContext(eviolites: Map[Pokemon, Vector[Evolution]])
 	def randomizeTrainerPokes() = {
 		val encounterCounts = RandomizeBattles.all(groupByNumber, starterMapping, pokeMapping, minAppearanceLevels)
 		// Also balances pokes afterwards based on their types
-		val pokePool = minAppearanceLevels.keySet.flatMap { _.iterator } ++ encounterCounts.keySet ++
-			starterMapping.valuesIterator.flatMap { _.iterator }
-		CompensateForType(pokePool, encounterCounts)
+		CompensateForType(minAppearanceLevels ++ starterMapping.valuesIterator.map { _ -> 5 }, encounterCounts)
 	}
 }
