@@ -16,8 +16,8 @@ import java.io.PrintWriter
 object CompensateForType
 {
 	private val ignoredVariance = 0.25
-	private val buffPer10PercentVariance = 0.012
-	private val debuffPer10PercentVariance = 0.008
+	private val buffPer10PercentVariance = 0.011
+	private val debuffPer10PercentVariance = 0.007
 
 	/**
 	 * Adjusts some poke's offensive and defensive stats in order to compensate for their relatively

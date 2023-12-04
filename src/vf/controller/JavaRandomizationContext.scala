@@ -4,8 +4,14 @@ import com.dabomstew.pkrandom.Settings
 import com.dabomstew.pkrandom.pokemon.{Evolution, Pokemon}
 import com.dabomstew.pkrandom.romhandlers.RomHandler
 import utopia.flow.collection.CollectionExtensions._
+import utopia.flow.parse.file.FileExtensions._
+import utopia.flow.parse.json.{JsonParser, JsonReader}
+import utopia.flow.util.TryCatch
+import utopia.vault.database.columnlength.ColumnLengthRules
 import vf.model._
 import vf.poke.core.util.Common._
+
+import java.nio.file.Paths
 
 object JavaRandomizationContext
 {
@@ -92,6 +98,19 @@ class JavaRandomizationContext(eviolites: Map[Pokemon, Vector[Evolution]])
 	
 	def record() = {
 		cPool.tryWith { implicit c =>
+			println("Applying length rules")
+			implicit val jsonParser: JsonParser = JsonReader
+			Paths.get("data")
+				.tryIterateChildrenCatching {
+					_.filter { f => f.fileName.contains("length") && f.fileType == "json" }
+						.map { ColumnLengthRules.loadFrom(_) }
+						.toTryCatch
+				} match
+			{
+				case TryCatch.Success(_, failures) =>
+					failures.headOption.foreach { log(_, s"Failed to apply ${ failures.size } length rules") }
+				case TryCatch.Failure(error) => log(error, "Couldn't apply length rules")
+			}
 			println("Recording results to the database")
 			val record = RecordToDb.newRandomization()
 			record.pokes()

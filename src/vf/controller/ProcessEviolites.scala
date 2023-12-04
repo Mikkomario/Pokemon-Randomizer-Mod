@@ -2,8 +2,8 @@ package vf.controller
 
 import com.dabomstew.pkrandom.pokemon.{Evolution, Pokemon}
 import com.dabomstew.pkrandom.romhandlers.RomHandler
-import utopia.flow.collection.CollectionExtensions._
 import vf.model.{EvolveGroup, Pokes}
+import vf.poke.core.model.enumeration.Stat
 
 import scala.jdk.CollectionConverters._
 
@@ -18,12 +18,12 @@ object ProcessEviolites
 	private val defaultEvolveLevelIncrease = 10
 	
 	// Rate of how much the BST difference (between eviolite and evolved form) is "caught up" by the unevolved from
-	private val evoStatCatchUpRate = 0.8
+	private val evoStatCatchUpRate = 0.7
 	// Rate of eviolite form stat increase applied to the previous form, if applicable
 	private val preFormStatBoostMod = 0.3
 	
 	// The rate by how much the highest stat(s) of the eviolite poke outperform the evolved form
-	private val outperformanceRates = Vector(0.2, 0.05)
+	private val outperformanceRates = Vector(0.25, 0.1)
 	
 	/**
 	 * Detaches eviolite pokes from their evolve-chains. Should be called before Pokes and EvolveGroups are initiated.
@@ -83,10 +83,8 @@ object ProcessEviolites
 					evolvedForms.map { _.name }.mkString(" / ") }")
 				
 				// Determines the amount of BST boost to apply
-				val bstDifferenceRate = evolvedForms.map { _.bst }.maxOption match {
-					case Some(evolvedBst) => (evolvedBst - poke.bst) / poke.bst
-					case None => 0.0
-				}
+				val averageEvolvedBst = evolvedForms.map { _.bst }.sum / evolvedForms.size
+				val bstDifferenceRate = (averageEvolvedBst - poke.bst) / poke.bst
 				val bstScaling = 1.0 + bstDifferenceRate * evoStatCatchUpRate
 				// Applies the BST scaling
 				if (bstScaling > 1.0) {
@@ -101,10 +99,16 @@ object ProcessEviolites
 					}
 				}
 				
-				// Applies the outperformance on the highest stats
-				poke.stats.toVector.reverseSortBy { _._2 }.zip(outperformanceRates)
-					.foreach { case ((stat, currentValue), outPerformanceRate) =>
-						val newValue = (evolvedForms.map { _(stat) }.max * (1 + outPerformanceRate)).round.toInt
+				// Applies the out-performance on the lowest difference stats
+				val statDifferences = Stat.values.map { stat =>
+					val evolvedStat = evolvedForms.map { _(stat) }.sum / evolvedForms.size
+					val difference = evolvedStat - poke(stat)
+					(stat, evolvedStat, difference)
+				}
+				statDifferences.sortBy { _._3 }.zip(outperformanceRates)
+					.foreach { case ((stat, evolvedValue, _), outPerformanceRate) =>
+						val newValue = (evolvedValue * (1 + outPerformanceRate)).round.toInt
+						val currentValue = poke(stat)
 						if (newValue > currentValue) {
 							val increase = newValue - currentValue
 							writer.println(s"\t- Increases $stat by further $increase (${

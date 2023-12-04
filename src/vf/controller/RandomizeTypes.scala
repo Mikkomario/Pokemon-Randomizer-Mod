@@ -15,12 +15,11 @@ import scala.jdk.CollectionConverters._
  * @author Mikko Hilpinen
  * @since 3.7.2023, v1.0-alt
  */
-// FIXME: Now it is possible to add the primary type as a secondary type, also, type changes are a bit too rare
 object RandomizeTypes
 {
 	// ATTRIBUTES   -----------------------
 	
-	private val changePrimaryChance = 0.25
+	private val changePrimaryChance = 0.3
 	private val changeSecondaryChance = 0.5
 	private val addSecondaryChance = 0.65
 	private val addSecondaryChainingChance = 0.75
@@ -163,7 +162,7 @@ object RandomizeTypes
 				original.secondary.flatMap { secondary =>
 					conversions.get(secondary).map { newType =>
 						poke.secondaryType = newType
-						writer.println(s"Waps secondary type of ${poke.name} from $secondary to $newType")
+						writer.println(s"Swaps secondary type of ${poke.name} from $secondary to $newType")
 						poke.number -> Map(secondary -> newType)
 					}
 				}

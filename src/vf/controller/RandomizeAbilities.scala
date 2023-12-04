@@ -103,26 +103,36 @@ object RandomizeAbilities
 		val legendaryAbilityWeight = weightMapFor(abilityContextCounts, level = 1)
 		val megaAbilityWeight = weightMapFor(abilityContextCounts, level = 2)
 		
-		// Now, maps the abilities of each evo-group
-		groups.foreach { group =>
-			// Will never swap wonder guard
-			val typeWts = group.types.iterator.map { t => typeAbilityWeights(t) }
-				.reduce { _.mergeWith(_) { _ + _ } }
-			// Slightly WET WET here...
-			lazy val baseWeights = typeWts.map { case (ability, wt) => ability -> wt * baseAbilityWeight(ability) }
-			lazy val legendWeights = typeWts.map { case (ability, wt) => ability -> wt * legendaryAbilityWeight(ability) }
-			lazy val megaWeights = typeWts.map { case (ability, wt) => ability -> wt * megaAbilityWeight(ability) }
-			val originalAbilities = group.iterator
-				.flatMap { p =>
-					val level = if (p.isMega) megaWeights else if (p.isLegendary) legendWeights else baseWeights
-					p.abilities.map { _._1 -> level }
+		Log("abilities") { writer =>
+			// Now, maps the abilities of each evo-group
+			groups.foreach { group =>
+				// Will never swap wonder guard
+				val typeWts = group.types.iterator.map { t => typeAbilityWeights(t) }
+					.reduce { _.mergeWith(_) { _ + _ } }
+				// Slightly WET WET here...
+				lazy val baseWeights = typeWts.map { case (ability, wt) => ability -> wt * baseAbilityWeight(ability) }
+				lazy val legendWeights = typeWts.map { case (ability, wt) => ability -> wt * legendaryAbilityWeight(ability) }
+				lazy val megaWeights = typeWts.map { case (ability, wt) => ability -> wt * megaAbilityWeight(ability) }
+				val originalAbilities = group.iterator
+					.flatMap { p =>
+						val level = if (p.isMega) megaWeights else if (p.isLegendary) legendWeights else baseWeights
+						p.abilities.map { _._1 -> level }
+					}
+					.toSet.filterNot { _._1 == Abilities.wonderGuard }
+				lazy val mappings = originalAbilities
+					.map { case (ability, weights) => ability -> RandomUtils.weighedRandom(weights) }.toMap
+				
+				// Applies the mappings, except for certain pokes
+				group.iterator.foreach { p =>
+					if (!notRandomizedPokeNumbers.contains(p.number)) {
+						p.mapAbilities(mappings)
+						writer.println(s"${p.name}")
+						mappings.foreach { case (from, to) =>
+							writer.println(s"\t- ${ rom.abilityName(from) } => ${ rom.abilityName(to) }")
+						}
+					}
 				}
-				.toSet.filterNot { _._1 == Abilities.wonderGuard }
-			lazy val mappings = originalAbilities
-				.map { case (ability, weights) => ability -> RandomUtils.weighedRandom(weights) }.toMap
-			
-			// Applies the mappings, except for certain pokes
-			group.iterator.foreach { p => if (!notRandomizedPokeNumbers.contains(p.number)) p.mapAbilities(mappings) }
+			}
 		}
 	}
 	

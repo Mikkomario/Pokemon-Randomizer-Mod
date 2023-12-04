@@ -127,10 +127,13 @@ object TypeRelations
 	private def relationsOf(t: PokeType)(implicit rom: RomHandler) = {
 		val related = relations.node(t).leavingEdges.iterator
 			// Removes all types that don't appear in the targeted game
-			.filter { e => rom.typeInGame(e.end.value) }
+			.filter { e =>
+				val t2 = e.end.value
+				t2 != t && rom.typeInGame(t2)
+			}
 			.map { e => e.value -> e.end.value }
 			.toVector
-		val unrelated = PokeType.values.filter { t => rom.typeInGame(t) && !related.exists { _._2 == t } }
+		val unrelated = PokeType.values.filter { t2 => t2 != t && rom.typeInGame(t2) && !related.exists { _._2 == t2 } }
 		val relatedMap = relations.node(t).leavingEdges.iterator
 			// Removes all types that don't appear in the targeted game
 			// Also removes the type itself

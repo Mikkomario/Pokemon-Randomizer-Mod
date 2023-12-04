@@ -104,9 +104,9 @@ class RecordToDb(gameId: Int, randomizationId: Int)(implicit rom: RomHandler)
 	def abilities()(implicit pokes: Pokes, connection: Connection) = {
 		// [Poke id, ability index, hidden]
 		val abilityData = pokes.iterator.flatMap { poke =>
-			lazy val pokeId = idOf(poke)
+			val pokeId = idOf(poke)
 			poke.abilities.map { case (abilityIndex, isHidden) => (pokeId, abilityIndex, isHidden) }
-		}
+		}.toVector
 		// Records the abilities first
 		val abilityIndices = abilityData.map { _._2 }.toSet
 		val recordedAbilities = DbAbilities.inGame(gameId).withInGameIds(abilityIndices).pull
@@ -116,9 +116,10 @@ class RecordToDb(gameId: Int, randomizationId: Int)(implicit rom: RomHandler)
 			.map { a => a.indexInGame -> a.id }
 			.toMap
 		// Then which ability belongs to which poke
-		PokeAbilityModel.insert(abilityData.map { case (pokeId, abilityIndex, isHidden) =>
+		val dataToInsert = abilityData.map { case (pokeId, abilityIndex, isHidden) =>
 			PokeAbilityData(pokeId, abilityIdMap(abilityIndex), isHidden = isHidden)
-		}.toVector)
+		}
+		PokeAbilityModel.insert(dataToInsert)
 	}
 	
 	def stats()(implicit pokes: Pokes, connection: Connection) =
@@ -150,7 +151,7 @@ class RecordToDb(gameId: Int, randomizationId: Int)(implicit rom: RomHandler)
 			val (levelMoves, evoMoves) = moveLearns.divideBy { _.level == 0 }.toTuple
 			val levelMoveData = levelMoves
 				.map { moveLearn => MoveLearnData(pokeId, moveIdMap(moveLearn.move), moveLearn.level) }
-			val evoMoveData = evoMoves.map { moveLearn => EvoMoveData(pokeId, moveLearn.move) }
+			val evoMoveData = evoMoves.map { moveLearn => EvoMoveData(pokeId, moveIdMap(moveLearn.move)) }
 			levelMoveData -> evoMoveData
 		}
 		MoveLearnModel.insert(levelMoveData)

@@ -40,7 +40,6 @@ object RandomizeBattles
 	
 	// OTHER    --------------------------
 	
-	// FIXME: Early magicarp battles may match to "gyarados" pokes because min appearance level sanity is not applied on poke-to-poke basis
 	def all(allGroups: Map[Int, EvolveGroup], starterMapping: Map[EvolveGroup, EvolveGroup],
 	        pokeMapping: Map[Int, Vector[EvolveGroup]], minAppearanceLevels: Map[EvolveGroup, Int])
 	       (implicit rom: RomHandler, settings: Settings) =
@@ -73,7 +72,6 @@ object RandomizeBattles
 			
 			encounterCounts
 		}
-		// TODO: Is double battle mode correct?
 		// Saves the changes to the ROM
 		rom.setTrainers(trainers, false)
 		
@@ -121,13 +119,19 @@ object RandomizeBattles
 					// Looks for a mapping result first
 					val mappingOptions = pokeMapping.getOrElse(originalNumber, Vector())
 						.filter { g =>
-							// Checks for a possible stricter type-requirement
-							if (useStrictTyping &&
-								originalTypeRelations.apply(g.formAtLevel(level).types) < minStrictTypeRelation)
-								false
+							// Makes sure the group's minimum appearance level is respected
+							val minAppearanceLevelIsAccepted = minAppearanceLevels.get(g).forall { level >= _ }
+							if (minAppearanceLevelIsAccepted) {
+								// Checks for a possible stricter type-requirement
+								if (useStrictTyping &&
+									originalTypeRelations.apply(g.formAtLevel(level).types) < minStrictTypeRelation)
+									false
+								else
+									(!requireMegaEvolvable || g.canMegaEvolve) &&
+										minAppearanceLevels.get(g).forall { _ <= level } && !selectedGroups.contains(g)
+							}
 							else
-								(!requireMegaEvolvable || g.canMegaEvolve) &&
-									minAppearanceLevels.get(g).forall { _ <= level } && !selectedGroups.contains(g)
+								false
 						}
 					// Case: Mapping result available => Selects one randomly
 					if (mappingOptions.nonEmpty) {
@@ -142,7 +146,7 @@ object RandomizeBattles
 			selectedGroups += selectedGroup
 			
 			// Assigns the selected poke
-			// TODO: Apply random form
+			// TODO: Apply random form (?)
 			
 			// Logs
 			writer.println(s"\t- ${ originalPoke.name } (${ originalPoke.originalState.types }) lvl ${ tp.level } (${
@@ -250,27 +254,26 @@ object RandomizeBattles
 		lazy val typeRelations = TypeRelations.of(originalType)
 		lazy val minTypeRelation = if (useStrictTyping) minStrictTypeRelation else defaultMinTypeRelation
 		
-		val options = pool.flatMap { group =>
-			// 1, 2 & 4
-			if ((!requireMegaEvolvable || group.canMegaEvolve) &&
-				minAppearanceLevels.get(group).forall { l => l <= level || l <= 5 } && !used.contains(group))
-			{
-				val form = group.formAtLevel(level)
-				val bst = form.bst
-				// 3
-				if (allowedBst.contains(bst)) {
-					// May apply type-filtering also
-					val isSameType = originalType.types.exists { t => form.types.contains(t) }
-					lazy val typeRelation = typeRelations(form.types)
-					if (isSameType || typeRelation >= minTypeRelation) {
-						// Calculates a weight modifier based on BST and type
-						val bstRatio = bst / originalBst
-						val bstWeight = math.pow(1 - (1 - bstRatio).abs, bstDiffWeightMod)
-						val typeWeight = if (isSameType) sameTypeWeight else typeWeights.getOrElse(typeRelation, 1.0)
-						Some((group, form) -> (bstWeight * typeWeight))
-					}
-					else
-						None
+		// Applies filter conditions 1, 2 & 4
+		val nonBstFilteredOptions = pool.filter { group =>
+			(!requireMegaEvolvable || group.canMegaEvolve) &&
+				minAppearanceLevels.get(group).forall { l => l <= level || l <= 5 } &&
+				!used.contains(group)
+		}
+		val options = nonBstFilteredOptions.flatMap { group =>
+			val form = group.formAtLevel(level)
+			val bst = form.bst
+			// 3
+			if (allowedBst.contains(bst)) {
+				// May apply type-filtering also
+				val isSameType = originalType.types.exists { t => form.types.contains(t) }
+				lazy val typeRelation = typeRelations(form.types)
+				if (isSameType || typeRelation >= minTypeRelation) {
+					// Calculates a weight modifier based on BST and type
+					val bstRatio = bst / originalBst
+					val bstWeight = math.pow(1 - (1 - bstRatio).abs, bstDiffWeightMod)
+					val typeWeight = if (isSameType) sameTypeWeight else typeWeights.getOrElse(typeRelation, 1.0)
+					Some((group, form) -> (bstWeight * typeWeight))
 				}
 				else
 					None
@@ -284,31 +287,38 @@ object RandomizeBattles
 			println(s"Warning: No options for $originalGroup/${
 				original.name} at lvl $level. Strict = $useStrictTyping, Mega = $requireMegaEvolvable")
 			
-			writer.println(s"No options for $originalGroup/${original.name} at lvl $level ($originalType $originalBst BST). Strict = $useStrictTyping, Mega = $requireMegaEvolvable")
+			writer.println(s"No options for $originalGroup/${
+				original.name} at lvl $level ($originalType $originalBst BST). Strict = $useStrictTyping, Mega = $requireMegaEvolvable")
 			writer.print(s"\t- Allowed BST range = $allowedBst")
-			writer.println(s"\t- $typeRelations")
-			pool.foreach { group =>
-				val megaAccepted = !requireMegaEvolvable || group.canMegaEvolve
-				val minLevel = minAppearanceLevels.get(group)
-				val minLevelAccepted = minLevel.forall { _ <= level }
-				val wasUsed = used.contains(group)
-				if (megaAccepted && minLevelAccepted && !wasUsed) {
-					val form = group.formAtLevel(level)
-					val bst = form.bst
-					val bstAccepted = allowedBst.contains(bst)
-					val isSameType = originalType.types.exists { t => form.types.contains(t) }
-					val typeRelation = typeRelations(form.types)
-					val typeAccepted = isSameType || typeRelation >= minTypeRelation
-					writer.println(s"\t\t- $group => ${form.name} (${form.types} $bst BST)")
-					writer.println(s"\t\t\t- Can mega evolve = ${group.canMegaEvolve}; Mega condition accepted = $megaAccepted")
-					writer.println(s"\t\t\t- Min appearance level = $minLevel; Level accepted = $minLevelAccepted")
-					// writer.println(s"\t\t\t- Was already used = $wasUsed")
-					writer.println(s"\t\t\t- BST accepted = $bstAccepted")
-					writer.println(s"\t\t\t- Same type = $isSameType; Type relation = $typeRelation; Type accepted = $typeAccepted")
+			if (nonBstFilteredOptions.isEmpty) {
+				writer.println(s"\t- $typeRelations")
+				pool.foreach { group =>
+					val megaAccepted = !requireMegaEvolvable || group.canMegaEvolve
+					val minLevel = minAppearanceLevels.get(group)
+					val minLevelAccepted = minLevel.forall { _ <= level }
+					val wasUsed = used.contains(group)
+					if (megaAccepted && minLevelAccepted && !wasUsed) {
+						val form = group.formAtLevel(level)
+						val bst = form.bst
+						val bstAccepted = allowedBst.contains(bst)
+						val isSameType = originalType.types.exists { t => form.types.contains(t) }
+						val typeRelation = typeRelations(form.types)
+						val typeAccepted = isSameType || typeRelation >= minTypeRelation
+						writer.println(s"\t\t- $group => ${form.name} (${form.types} $bst BST)")
+						writer.println(s"\t\t\t- Can mega evolve = ${group.canMegaEvolve}; Mega condition accepted = $megaAccepted")
+						writer.println(s"\t\t\t- Min appearance level = $minLevel; Level accepted = $minLevelAccepted")
+						// writer.println(s"\t\t\t- Was already used = $wasUsed")
+						writer.println(s"\t\t\t- BST accepted = $bstAccepted")
+						writer.println(s"\t\t\t- Same type = $isSameType; Type relation = $typeRelation; Type accepted = $typeAccepted")
+					}
 				}
+				originalGroup -> original
 			}
-			
-			originalGroup -> original
+			else {
+				writer.println(s"Selects randomly from ${nonBstFilteredOptions.size} non-BST-filtered options")
+				val selectedGroup = nonBstFilteredOptions.toVector.random
+				selectedGroup -> selectedGroup.formAtLevel(level)
+			}
 		}
 		else
 			weighedRandom(options)
