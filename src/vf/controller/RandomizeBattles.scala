@@ -73,7 +73,7 @@ object RandomizeBattles
 			encounterCounts
 		}
 		// Saves the changes to the ROM
-		rom.setTrainers(trainers, false)
+		rom.setTrainers(trainers, settings.isDoubleBattleMode)
 		
 		// Returns the number of encounters per poke
 		encounterCounts

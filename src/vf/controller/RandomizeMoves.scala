@@ -126,7 +126,7 @@ object RandomizeMoves
 			}
 			if (missingPokes.nonEmpty) {
 				writer.println(s"\nWARNING: The following ${missingPokes.size} pokes didn't receive moves by default:")
-				missingPokes.foreach { p => writer.println(s"\t- $p (#${p.number})") }
+				missingPokes.foreach { p => writer.println(s"\t- ${p.wrapped.fullName} (#${p.number})") }
 			}
 			// Applies the new moves
 			rom.setMovesLearnt(newMovesBuilder)
@@ -167,7 +167,7 @@ object RandomizeMoves
 			.toMap -- poke.types.types
 		
 		writer.println(s"\nProcessing ${poke.name} (${poke.types} / ${
-			if (poke(Attack) > poke(SpecialAttack)) "Physical" else "Special" })\t----------------")
+			if (poke(Attack) > poke(SpecialAttack)) "Physical" else "Special" } (${(poke.attackSpAttackRatio * 100).toInt}% physical))\t----------------")
 		writer.println(s"\t- Applies the following type weight modifiers, in addition to type relations:")
 		additionalTypeWeights.filterNot { _._2 == 1.0 }.foreach { case (t, wt) => writer.println(s"\t\t- $t: $wt") }
 		

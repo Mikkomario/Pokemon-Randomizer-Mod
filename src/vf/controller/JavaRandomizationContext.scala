@@ -68,14 +68,14 @@ class JavaRandomizationContext(eviolites: Map[Pokemon, Vector[Evolution]])
 	def randomizeTypes() = {
 		RandomizeTypes.all(evolveGroups)
 		RandomizeTypes.fixCosmeticForms()
-		// Also applies type stat "compensation" in order to make the pokes more characteristic of the new type
-		ReflectTypeChangesInStats()
 	}
 	def randomizeAbilities() = RandomizeAbilities.all(evolveGroups)
 	def randomizeStats() = {
 		// Applies the eviolite stat changes before the randomization, so that they make more sense in the game's context
 		ProcessEviolites.stats(eviolites, groupByNumber)
 		RandomizeStats.all(evolveGroups)
+		// Also applies type stat "compensation" in order to make the pokes more characteristic of the new type
+		ReflectTypeChangesInStats()
 	}
 	def makeEvolvesEasier() = MakeEvolvesEasier.all(evolveGroups)
 	def randomizeStarters() = {

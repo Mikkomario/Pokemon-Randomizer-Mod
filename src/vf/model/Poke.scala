@@ -82,6 +82,7 @@ class Poke(val wrapped: Pokemon, val cosmeticForms: Vector[Pokemon] = Vector())(
 			.filter { p => p.forall { _.isDefined } && p.isAsymmetric }.map { _.map { _.get } }
 		Vector(primaryChange, secondaryChange).flatten.map { _.toTuple }.toMap
 	}
+	def preservedOriginalTypes = originalState.types.types.toSet & types.types.toSet
 	/**
 	 * @return Type added as the secondary type during this process
 	 */

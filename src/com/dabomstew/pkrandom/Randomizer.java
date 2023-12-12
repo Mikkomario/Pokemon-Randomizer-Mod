@@ -467,7 +467,6 @@ public class Randomizer {
         // Trainer Pokemon
         // 1. Add extra Trainer Pokemon
         // 2. Set trainers to be double battles and add extra Pokemon if necessary
-        // TODO: Review
         // 3. Randomize Trainer Pokemon
         // 4. Modify rivals to carry starters
         // 5. Force Trainer Pokemon to be fully evolved
@@ -480,7 +479,8 @@ public class Randomizer {
             trainersChanged = true;
         }*/
 
-        if (settings.isDoubleBattleMode()) {
+        // Double battle mode is automatically handled in the custom battle randomization, so it is not applied here
+        if (settings.isDoubleBattleMode() && settings.getTrainersMod() != Settings.TrainersMod.UNCHANGED) {
             romHandler.doubleBattleMode();
             trainersChanged = true;
         }
