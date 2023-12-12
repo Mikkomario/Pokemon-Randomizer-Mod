@@ -64,7 +64,6 @@ object RandomizeWildEncounters
 			if (levelMod != 1.0)
 				allEncounters.foreach { _.scaleLevelBy(levelMod) }
 			val encountersByPokeNumber = allEncounters.groupBy { _.poke.number }
-			// FIXME: Likely wrong, because yields levels like 0
 			val pokeLevelRanges = encountersByPokeNumber.view.mapValues { encounters =>
 				val levels = encounters.map { _.levelRange }
 				NumericSpan(levels.iterator.map { _.start }.min, levels.iterator.map { _.end }.max)
@@ -204,39 +203,6 @@ object RandomizeWildEncounters
 				.flatMap { case (pokeNumber, encounters) =>
 					val matches = pokeMapping(pokeNumber).sortBy { _._3.start }
 					val encountersByZone = encounters.groupBy { _.zone }
-					// FIXME: minLevelData is wrong (too high levels for first forms, consistently)
-					/*
-					Alomomola (11 encounters in 11 maps) maps to:
-						- Basculin (Water|Ground) from Basculin at levels 0 to 2
-						- Seel (Water) from Seel-Dewgong at levels 2 to 4
-					Which translates to:
-						- Basculin (Water|Ground) from lvl 28 onwards
-						- Seel-Dewgong (Water|Psychic) from lvl 33 onwards
-					 */
-					/*
-					Processing 594
-						- Distributes between:
-							- Basculin at levels 0 to 2
-							- Seel at levels 2 to 4
-						- 11 zones => 5 per match + 1
-							- Level ranges: 28 to 28, 33 to 33, 33 to 33, 33 to 33, 33 to 33, 33 to 33, 33 to 33, 33 to 33, 33 to 33, 33 to 33, 33 to 33
-							- Average levels: 28.0, 33.0, 33.0, 33.0, 33.0, 33.0, 33.0, 33.0, 33.0, 33.0, 33.0
-						- Basculin
-							- Default distribution is zones 1-7
-							- Considers 0 of those zones better for the previous match		- Gives zone 1 (levels 28 to 28) to Basculin
-							- Gives zone 2 (levels 33 to 33) to Basculin
-							- Gives zone 3 (levels 33 to 33) to Basculin
-							- Gives zone 4 (levels 33 to 33) to Basculin
-							- Gives zone 5 (levels 33 to 33) to Basculin
-							- Gives zone 6 (levels 33 to 33) to Basculin
-						- Seel
-							- Default distribution is zones 7-12
-							- Considers 0 of those zones better for the previous match		- Gives zone 1 (levels 33 to 33) to Seel
-							- Gives zone 2 (levels 33 to 33) to Seel
-							- Gives zone 3 (levels 33 to 33) to Seel
-							- Gives zone 4 (levels 33 to 33) to Seel
-							- Gives zone 5 (levels 33 to 33) to Seel
-					 */
 					val minLevelData: Vector[(EvolveGroup, Int)] = {
 						val zoneCount = encountersByZone.size
 						// Case: Less zones than variants to fit in => Assigns all variants to all available zones
@@ -258,8 +224,6 @@ object RandomizeWildEncounters
 							val zonesPerMatch = zoneCount / matches.size
 							val additionalZonesCount = zoneCount % matches.size
 							
-							// FIXME: It seems like either this or the earlier encounter level ranges is wrong -
-							//  at least there's a discrepancy
 							val zoneLevelRanges = encountersByZone.view
 								.mapValues { encounters =>
 									val levels = encounters.map { _.levelRange }

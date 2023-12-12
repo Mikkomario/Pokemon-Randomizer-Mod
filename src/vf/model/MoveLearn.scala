@@ -17,12 +17,21 @@ object MoveLearn
  */
 case class MoveLearn(level: Int, move: Int)
 {
+	// COMPUTED --------------------
+	
 	def toMoveLearnt = {
 		val l = new MoveLearnt()
 		l.level = level
 		l.move = move
 		l
 	}
+	
+	def isEvoMove = level < 0
+	def isStartingMove = level == 0
+	def isLearnedMove = level > 1
+	
+	
+	// OTHER    --------------------
 	
 	def withMove(move: Int) = copy(move = move)
 	def mapMove(f: Int => Int) = withMove(f(move))

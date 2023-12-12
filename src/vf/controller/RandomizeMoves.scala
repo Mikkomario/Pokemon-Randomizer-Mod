@@ -6,17 +6,22 @@ import com.dabomstew.pkrandom.romhandlers.RomHandler
 import com.dabomstew.pkrandom.{RandomSource, Settings}
 import utopia.flow.collection.CollectionExtensions._
 import utopia.flow.collection.immutable.Pair
-import utopia.flow.collection.immutable.range.{HasInclusiveOrderedEnds, Span}
+import utopia.flow.collection.immutable.caching.cache.Cache
+import utopia.flow.collection.immutable.range.{HasInclusiveOrderedEnds, NumericSpan, Span}
+import utopia.flow.operator.enumeration.End.{First, Last}
 import vf.model.TypeRelation.{Relative, StrongRelative, Unrelated, WeakRelative}
 import vf.model._
+import vf.poke.core.model.cached.{Spread, SpreadThresholds, SpreadValues}
 import vf.poke.core.model.enumeration.PokeType
 import vf.poke.core.model.enumeration.Stat.{Attack, SpecialAttack}
 import vf.util.RandomUtils._
 import vf.util.PokeExtensions._
+import vf.util.RandomUtils
 
 import java.io.PrintWriter
 import java.util
 import scala.annotation.tailrec
+import scala.collection.immutable.VectorBuilder
 import scala.collection.mutable
 
 /**
@@ -34,6 +39,7 @@ object RandomizeMoves
 	private val additionalMovesPerFavouriteLevel = 4
 	
 	private val swapMoveChance = 0.4
+	private val swapRareMoveChance = 0.2
 	private val sameTypeChance = 0.4
 	private val sameCategoryChance = 0.4
 	// Applied when attack and special attack -ratio is modified
@@ -43,6 +49,7 @@ object RandomizeMoves
 	// This value is applied in reduction. E.g. at least 100% - X% power
 	// Power increase is stronger (e.g. -50% converts to +100%)
 	private val swapMaxPowerDifference = 0.35
+	private val maxStartingMovePower = 50
 	
 	private val addedTypeMoveChance = 0.75
 	private val ownTypeMoveChance = 0.5
@@ -57,6 +64,11 @@ object RandomizeMoves
 	// An favourite level -based increase sometimes applied to defensive and offensive weight modifiers
 	private val buffWeightIncreasePerFavouriteLevel = 0.1
 	
+	private val levelSpreadWeightMods = SpreadValues(0.25, 1.0, 1.5, 0.5)
+	private val appearanceRateImpactMod = 0.5
+	private val appearanceRateWeightModRange = NumericSpan(0.2, 3.0)
+	private val rareMoveAppearanceRateThreshold = 0.2
+	
 	
 	// OTHER    -------------------------
 	
@@ -66,6 +78,10 @@ object RandomizeMoves
 	       (implicit rom: RomHandler, pokes: Pokes, moves: Moves, settings: Settings) =
 	{
 		Log("moves") { writer =>
+			// Records move level spreads and appearance rates
+			val moveLevelWeightSpreads = moveLevelSpreadMapFrom(groups).view
+				.mapValues { _ + levelSpreadWeightMods }.toMap
+			val appearanceRates = moveAppearanceRatesFrom(groups)
 			// Stores moves in java data structures because of the rom interface
 			val originalMovesLearnt = rom.getMovesLearnt
 			val newMovesBuilder = new java.util.HashMap[Integer, java.util.List[MoveLearnt]]()
@@ -80,7 +96,8 @@ object RandomizeMoves
 						case None => evolveLevel
 					}
 					val moveListBuilder = new util.ArrayList[MoveLearnt]()
-					val movesLearnt = apply(poke, firstLevel, group.favouriteLevel, writer)
+					val movesLearnt = apply(poke, firstLevel, group.favouriteLevel, moveLevelWeightSpreads, appearanceRates,
+						writer)
 					movesLearnt.foreach { move => moveListBuilder.add(move.toMoveLearnt) }
 					newMovesBuilder.put(poke.number, moveListBuilder)
 					poke -> movesLearnt
@@ -89,7 +106,8 @@ object RandomizeMoves
 			// Makes sure cosmetic forms have the same moves as their base forms
 			pokes.cosmeticForms.foreach { cosmeticPoke =>
 				if (originalMovesLearnt.containsKey(cosmeticPoke.number: Integer) &&
-					originalMovesLearnt.containsKey(cosmeticPoke.baseForme.number: Integer)) {
+					originalMovesLearnt.containsKey(cosmeticPoke.baseForme.number: Integer))
+				{
 					val copyList = new java.util.ArrayList(newMovesBuilder.get(cosmeticPoke.baseForme.number))
 					newMovesBuilder.put(cosmeticPoke.number, copyList)
 				}
@@ -100,7 +118,8 @@ object RandomizeMoves
 					None
 				else {
 					val moveListBuilder = new util.ArrayList[MoveLearnt]()
-					apply(poke, 0, 0, writer).foreach { move => moveListBuilder.add(move.toMoveLearnt) }
+					apply(poke, 0, 0, moveLevelWeightSpreads, appearanceRates, writer)
+						.foreach { move => moveListBuilder.add(move.toMoveLearnt) }
 					newMovesBuilder.put(poke.number, moveListBuilder)
 					Some(poke)
 				}
@@ -117,7 +136,8 @@ object RandomizeMoves
 	}
 	
 	// Returns new moves to assign (level -> move number)
-	private def apply(poke: Poke, firstLevel: Int, favouriteLevel: Int, writer: PrintWriter)
+	private def apply(poke: Poke, firstLevel: Int, favouriteLevel: Int, levelWeightMods: Map[Int, Spread[Int, Double]],
+	                  moveAppearanceRates: Map[PokeType, Pair[Map[Int, Double]]], writer: PrintWriter)
 	                 (implicit moves: Moves, settings: Settings, rom: RomHandler): Vector[MoveLearn] =
 	{
 		// Adds weight modifiers to types based on how they affect this poke's offensive and defensive capabilities
@@ -160,8 +180,15 @@ object RandomizeMoves
 		// Contains move numbers of all already picked moves
 		val pickedMovesBuilder = mutable.Set[Int]()
 		
+		// Caches move appearance rates
+		val moveAppearanceRateCache = Cache { move: Move =>
+			val moveType = move.`type`.toScala
+			moveAppearanceRates(moveType).apply(if (poke.types.contains(moveType)) Last else First)
+				.getOrElse(move.number, 1.0)
+		}
+		
 		// Generates a new move
-		def newMove() = {
+		def newMove(targetLevel: Int) = {
 			// Prefers added type, if applicable
 			// Secondarily, prefers own type
 			// Thirdly, selects from related types
@@ -173,12 +200,14 @@ object RandomizeMoves
 						currentRelations.random(typeWeights, additionalTypeWeights)
 				}
 			val category = randomCategoryIn(moveType, poke.attackSpAttackRatio)
-			val move = randomMove(pickedMovesBuilder, moveType, category)
-			writer.println(s"New move: ${moves.byNumber(move).name}")
+			val powerRange = if (targetLevel <= 1) Some(NumericSpan(0.0, maxStartingMovePower)) else None
+			val move = randomMove(targetLevel, moveType, category, powerRange, poke.types, levelWeightMods,
+				moveAppearanceRateCache, pickedMovesBuilder)
+			writer.println(s"New move: ${move.name}")
 			move
 		}
 		// Finds a relative random move
-		def swapMove(original: Move) = {
+		def swapMove(original: Move, level: Int) = {
 			// When selecting replacing move type, takes into consideration if the pokemon swapped type
 			// i.e. STAB moves will still remain STAB moves when they preserve their type
 			val originalMoveType = typeConversions.getOrElse(original.`type`: PokeType, original.`type`: PokeType)
@@ -211,24 +240,34 @@ object RandomizeMoves
 				else
 					None
 			}
-			val move = randomMove(pickedMovesBuilder, moveType, moveCategory, powerRange)
-			writer.println(s"Swaps ${original.name} to ${moves.byNumber(move).name}")
+			val move = randomMove(level, moveType, moveCategory, powerRange, poke.types, levelWeightMods,
+				moveAppearanceRateCache, pickedMovesBuilder)
+			writer.println(s"Swaps ${original.name} to ${move.name}")
 			move
 		}
 		// Preserves the previously selected move, if possible
-		def keepMove(original: Move) = {
+		def keepMove(original: Move, level: Int) = {
 			// Case: Can't keep the original move because of type change, overlap or stat change => Swaps to a new move
 			if ((categoriesChanged && original.category != MoveCategory.STATUS) ||
 				typeConversions.contains(original.`type`: PokeType) ||
 				pickedMovesBuilder.contains(original.number))
-				swapMove(original)
+				swapMove(original, level)
 			// Case: Keeps the original move
 			else {
 				pickedMovesBuilder += original.number
-				original.number
+				original
 			}
 		}
-		def swapOrKeep(original: Move) = if (chance(swapMoveChance)) swapMove(original) else keepMove(original)
+		def swapOrKeep(original: Move, level: Int) = {
+			// Chances to keep the move are higher for rare moves
+			val appliedSwapChance = {
+				if (moveAppearanceRateCache(original) <= rareMoveAppearanceRateThreshold)
+					swapRareMoveChance
+				else
+					swapMoveChance
+			}
+			if (chance(appliedSwapChance)) swapMove(original, level) else keepMove(original, level)
+		}
 		
 		// Assigns a certain number of starting and evo moves (based on settings)
 		val originalEvoMoves = poke.originalState.evoMoves
@@ -240,25 +279,27 @@ object RandomizeMoves
 				originalEvoMoves
 			// Case: Already has evo moves => Possibly swaps them
 			else if (originalEvoMoves.nonEmpty)
-				originalEvoMoves.map { move => swapOrKeep(moves.byNumber(move)) }
+				originalEvoMoves.map { move => swapOrKeep(moves.byNumber(move), firstLevel) }.map { _.number }
 			// Case: No existing evo moves => May add (based on settings)
 			else if (settings.isEvolutionMovesForAll)
-				Vector(newMove())
+				Vector(newMove(firstLevel).number)
 			// Case: Not adding new moves
 			else
 				Vector()
 		}
 		val startingMoves = {
-			val existing = originalStartingMoves.map { move => swapOrKeep(moves.byNumber(move)) }
+			val existing = originalStartingMoves.map { move => swapOrKeep(moves.byNumber(move), firstLevel) }
 			val minMoveCount = settings.getGuaranteedMoveCount
 			if (existing.hasSize < minMoveCount)
-				existing ++ Vector.fill(minMoveCount - existing.size) { newMove() }
+				existing ++ Vector.fill(minMoveCount - existing.size) { newMove(firstLevel) }
 			else
 				existing
 		}
 		
 		// Swaps (some of) the original moves
-		val newDefaultMoves = poke.normalMoves.map { _.mapMove { move => swapOrKeep(moves.byNumber(move)) } }
+		val newDefaultMoves = poke.normalMoves.map { learn =>
+			learn.mapMove { move => swapOrKeep(moves.byNumber(move), learn.level).number }
+		}
 		
 		// Assigns new moves to the between-levels
 		val newMoveLevels = {
@@ -272,11 +313,19 @@ object RandomizeMoves
 			else
 				Vector()
 		}
-		val (newNonDamagingMoves, newDamagingMoves) = Vector.fill(newMoveLevels.size) { moves.byNumber(newMove()) }
-			.divideBy { _.power > 0 }.toTuple
+		val (newNonDamagingMoves, newDamagingMoves) = newMoveLevels.map(newMove).divideBy { _.power > 0 }.toTuple
 		// Orders these new moves by power
 		// Non-power moves are placed randomly
-		val newMovesBuffer = mutable.Buffer.from(newDamagingMoves.sortBy { m => m.power * m.hitCount * m.hitratio })
+		val newMovesBuffer = mutable.Buffer.from(newDamagingMoves.sortBy { m =>
+			val base = m.power * m.hitCount * m.hitratio
+			val countingRecharge = if (m.isRechargeMove) base * 0.5 else base
+			val countingStatChange = if (m.hasBeneficialStatChange) countingRecharge * 1.15 else countingRecharge
+			m.criticalChance match {
+				case CriticalChance.GUARANTEED => countingStatChange * 1.6
+				case CriticalChance.INCREASED => countingStatChange * 1.1
+				case _ => countingStatChange
+			}
+		})
 		newNonDamagingMoves.foreach { move =>
 			if (newMovesBuffer.isEmpty)
 				newMovesBuffer.append(move)
@@ -285,7 +334,7 @@ object RandomizeMoves
 		}
 		
 		// Combines the moves together and adds additional moves, if needed
-		val standardMoves = evoMoves.map(MoveLearn.evo) ++ startingMoves.map(MoveLearn.start) ++
+		val standardMoves = evoMoves.map(MoveLearn.evo) ++ startingMoves.map { m => MoveLearn.start(m.number) } ++
 			(newDefaultMoves ++ newMoveLevels.iterator.zip(newMovesBuffer)
 				.map { case (level, move) => MoveLearn(level, move.number) })
 		val finalMoves = {
@@ -305,13 +354,13 @@ object RandomizeMoves
 				standardMoves.foreach { usedLevels += _.level }
 				val newMovesIter = Iterator
 					.continually {
-						val move = newMove()
 						val level = Iterator
 							.continually { firstLevel + RandomSource.nextInt(100 - firstLevel) }
 							.filterNot(usedLevels.contains)
 							.next()
+						val move = newMove(level)
 						usedLevels += level
-						MoveLearn(level, move)
+						MoveLearn(level, move.number)
 					}
 					.take(addedMoveCount)
 				standardMoves ++ newMovesIter
@@ -334,15 +383,20 @@ object RandomizeMoves
 	}
 	
 	// Randomly selects the move from available options
-	private def randomMove(pickedMovesBuilder: mutable.Set[Int], moveType: PokeType, category: MoveCategory,
-	                       powerRange: Option[HasInclusiveOrderedEnds[Double]] = None)
-	                      (implicit moves: Moves): Int =
-		randomMove(Some(moveType), Some(category), powerRange, pickedMovesBuilder)
+	private def randomMove(targetLevel: Int, moveType: PokeType, category: MoveCategory,
+	                       powerRange: Option[HasInclusiveOrderedEnds[Double]] = None, pokeTypes: TypeSet,
+	                       levelSpreadMods: Map[Int, Spread[Int, Double]], appearanceRateCache: Cache[Move, Double],
+	                       pickedMovesBuilder: mutable.Set[Int])
+	                      (implicit moves: Moves): Move =
+		_randomMove(targetLevel, Some(moveType), Some(category), powerRange, pokeTypes, levelSpreadMods,
+			appearanceRateCache, pickedMovesBuilder)
 	
 	@tailrec
-	private def randomMove(moveType: Option[PokeType], category: Option[MoveCategory],
-	                       powerRange: Option[HasInclusiveOrderedEnds[Double]], pickedMovesBuilder: mutable.Set[Int])
-	                      (implicit moves: Moves): Int =
+	private def _randomMove(targetLevel: Int, moveType: Option[PokeType], category: Option[MoveCategory],
+	                       powerRange: Option[HasInclusiveOrderedEnds[Double]], pokeTypes: TypeSet,
+	                       levelSpreadMods: Map[Int, Spread[Int, Double]], appearanceRateCache: Cache[Move, Double],
+	                       pickedMovesBuilder: mutable.Set[Int])
+	                      (implicit moves: Moves): Move =
 	{
 		// Filters move options by type and category
 		val filteredOptions: Set[Move] = moveType match {
@@ -373,28 +427,111 @@ object RandomizeMoves
 			if (powerRange.isDefined) {
 				// 1) For power-restricted moves, removes the type filter first, if possible
 				if (moveType.isDefined)
-					randomMove(None, category, powerRange, pickedMovesBuilder)
+					_randomMove(targetLevel, None, category, powerRange, pokeTypes, levelSpreadMods, appearanceRateCache,
+						pickedMovesBuilder)
 				// 2) Removes power filter, if possible
 				else
-					randomMove(moveType, category, None, pickedMovesBuilder)
+					_randomMove(targetLevel, moveType, category, None, pokeTypes, levelSpreadMods, appearanceRateCache,
+						pickedMovesBuilder)
 			}
 			// 3) Eases the category filter, if possible
 			else if (category.isDefined)
-				randomMove(moveType, None, powerRange, pickedMovesBuilder)
+				_randomMove(targetLevel, moveType, None, powerRange, pokeTypes, levelSpreadMods, appearanceRateCache,
+					pickedMovesBuilder)
 			// 4) Eases the type filter, if possible
 			else if (moveType.isDefined)
-				randomMove(None, category, powerRange, pickedMovesBuilder)
+				_randomMove(targetLevel, None, category, powerRange, pokeTypes, levelSpreadMods, appearanceRateCache,
+					pickedMovesBuilder)
 			// Case: Totally out of moves (unlikely) => Selects just any move
 			else
-				moves.all.head.number
+				moves.all.head
 		}
 		// Case: Valid set of available moves => Picks one randomly
 		else {
-			val index = RandomSource.nextInt(finalOptions.size)
-			val result = finalOptions.iterator.drop(index).next()
+			// Assigns a weight to each move based on their appearance rate and level spread
+			val weighedOptions = finalOptions.iterator.map { moveNumber =>
+				val move = moves.byNumber(moveNumber)
+				val levelWeight = levelSpreadMods.get(moveNumber) match {
+					case Some(levelWeights) => levelWeights(targetLevel)
+					case None => 1.0
+				}
+				val appearanceWeight = appearanceRateWeightModRange
+					.restrict(math.pow(appearanceRateCache(move), appearanceRateImpactMod))
+				move -> (levelWeight * appearanceWeight)
+			}.toVector
+			val result = RandomUtils.weighedRandom(weighedOptions)
 			// Remembers that this move was picked
-			pickedMovesBuilder += result
+			pickedMovesBuilder += result.number
 			result
 		}
+	}
+	
+	private def moveLevelSpreadMapFrom(groups: Iterable[EvolveGroup]) = {
+		// Records the levels at which each move appears
+		val moveLevelsMap = mutable.Map[Int, VectorBuilder[Int]]()
+		groups.foreach { group =>
+			group.levelThresholds
+				.map { case (poke, minLevel) =>
+					poke.moves.map { moveLearn =>
+						val level = {
+							if (moveLearn.isLearnedMove && moveLearn.level > minLevel)
+								moveLearn.level
+							else
+								minLevel
+						}
+						moveLearn.move -> level
+					}.toMap
+				}
+				.reduceLeft { (a, b) => a.mergeWith(b) { _ min _ } }
+				.foreach { case (move, level) => moveLevelsMap.getOrElseUpdate(move, new VectorBuilder()) += level }
+		}
+		moveLevelsMap.view.mapValues { levelsBuilder =>
+			// Forms level spread models based on this data
+			SpreadThresholds.from(levelsBuilder.result().sorted)
+		}.toMap
+	}
+	
+	// Returns:
+	// Two maps for each move type
+	//      1) Appearance rates (relative to average) in pokes outside of the moves type (no STAB)
+	//      2) Appearance rates in pokes with same type (STAB)
+	private def moveAppearanceRatesFrom(groups: Iterable[EvolveGroup])(implicit moves: Moves) =
+	{
+		// First entries are same type -counts
+		// Second values are other type -counts
+		// First values are move types. Second values are move ids
+		val countMaps = PokeType.values.map { t => t -> Pair.fill(mutable.Map[Int, Int]()) }.toMap
+		groups.foreach { group =>
+			// Counts the move appearances within and outside of poke types
+			// Removes duplicate entries. I.e. only counts +1 for the whole group, not +1 per poke form
+			val dividedTypeMoves = group.forms
+				.splitFlatMap { poke =>
+					poke.moves
+						// Skips moves not found within the implicit 'moves' object
+						// Also skips moves with unknown type
+						.flatMap { moveLearn =>
+							val moveNumber = moveLearn.move
+							moves.byNumber.get(moveNumber).map { move => move.`type`.toScala -> moveNumber }
+						}
+						.toSet
+						.divideBy { case (t, _) => poke.types.contains(t) }.toTuple
+				}
+			// Updates the count map for each move
+			Pair.tupleToPair(dividedTypeMoves).map { _.toSet }.foreachSide { case (moves, side) =>
+				moves.foreach { case (t, moveNumber) =>
+					countMaps(t)(side).updateWith(moveNumber) {
+						case Some(n) => Some(n + 1)
+						case None => Some(1)
+					}
+				}
+			}
+		}
+		// Processes the count maps so that each move contains a relative appearance rate within and outside of its type
+		countMaps.view.mapValues { appearanceMaps =>
+			appearanceMaps.map { appearanceMap =>
+				val averageAppearanceCount = appearanceMap.valuesIterator.sum / appearanceMap.size.toDouble
+				appearanceMap.view.mapValues { _ / averageAppearanceCount }.toMap
+			}
+		}.toMap
 	}
 }
