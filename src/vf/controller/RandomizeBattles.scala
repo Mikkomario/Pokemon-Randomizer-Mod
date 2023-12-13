@@ -11,6 +11,7 @@ import utopia.flow.view.mutable.eventful.Flag
 import vf.model.TypeRelation.{Relative, StrongRelative, Unrelated, WeakRelative}
 import vf.model._
 import vf.util.RandomUtils._
+import vf.util.PokeExtensions._
 
 import java.io.PrintWriter
 import scala.collection.mutable

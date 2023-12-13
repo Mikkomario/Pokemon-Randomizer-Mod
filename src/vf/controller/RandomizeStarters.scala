@@ -4,7 +4,9 @@ import com.dabomstew.pkrandom.romhandlers.RomHandler
 import utopia.flow.collection.CollectionExtensions._
 import utopia.flow.collection.immutable.range.NumericSpan
 import utopia.flow.operator.enumeration.End
-import vf.model.{EvolveGroup, TypeSet}
+import vf.model.EvolveGroup
+import vf.poke.core.model.cached.TypeSet
+import vf.util.PokeExtensions._
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._

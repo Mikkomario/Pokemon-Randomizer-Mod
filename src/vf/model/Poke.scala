@@ -6,6 +6,7 @@ import utopia.flow.collection.CollectionExtensions._
 import utopia.flow.collection.immutable.Pair
 import utopia.flow.view.mutable.caching.ResettableLazy
 import vf.controller.Settings
+import vf.poke.core.model.cached.TypeSet
 import vf.poke.core.model.enumeration.{PokeType, Stat}
 import vf.util.PokeExtensions._
 
@@ -46,7 +47,7 @@ class Poke(val wrapped: Pokemon, val cosmeticForms: Vector[Pokemon] = Vector())(
 	 *         May be game-specific.
 	 */
 	def number = wrapped.number
-	def name = wrapped.name
+	def name = wrapped.fullName
 	
 	def isLegendary = wrapped.isLegendary
 	def nonLegendary = !isLegendary

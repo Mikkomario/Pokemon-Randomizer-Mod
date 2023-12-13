@@ -4,6 +4,7 @@ import com.dabomstew.pkrandom.constants.{Abilities, GlobalConstants}
 import com.dabomstew.pkrandom.pokemon.MegaEvolution
 import utopia.flow.collection.immutable.Pair
 import vf.model.PokeLike.{badAbilities, negativeAbilities, wg}
+import vf.poke.core.model.cached.TypeSet
 import vf.poke.core.model.enumeration.Stat
 import vf.poke.core.model.enumeration.Stat.{Attack, SpecialAttack}
 

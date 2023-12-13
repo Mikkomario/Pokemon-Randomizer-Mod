@@ -3,6 +3,7 @@ package vf.model
 import com.dabomstew.pkrandom.pokemon.{Effectiveness, Type}
 import utopia.flow.collection.immutable.caching.cache.Cache
 import utopia.flow.operator.sign.{Sign, UncertainSign}
+import vf.poke.core.model.cached.TypeSet
 import vf.poke.core.model.enumeration.PokeType
 import vf.util.PokeExtensions._
 

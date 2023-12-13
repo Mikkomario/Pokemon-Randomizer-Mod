@@ -4,6 +4,9 @@ import com.dabomstew.pkrandom.pokemon.{Pokemon, Type}
 import vf.poke.core.model.enumeration.{PokeType, Stat}
 import vf.poke.core.model.enumeration.PokeType._
 import Stat._
+import com.dabomstew.pkrandom.romhandlers.RomHandler
+import vf.model.{EffectivenessRelations, TypeRelations}
+import vf.poke.core.model.cached.TypeSet
 
 import scala.language.implicitConversions
 
@@ -37,14 +40,23 @@ object PokeExtensions
 	{
 		def toJava = scalaToJavaType(t)
 	}
-	
 	implicit class RichType(val t: Type) extends AnyVal
 	{
 		def toScala = javaToScalaType(t)
 	}
+	implicit class RichTypeSet(val t: TypeSet) extends AnyVal
+	{
+		def effectiveness = EffectivenessRelations(t)
+		def relations(implicit rom: RomHandler) = TypeRelations.of(t)
+	}
 	
 	implicit class RichPokemon(val p: Pokemon) extends AnyVal
 	{
+		def types = {
+			val primary = p.primaryType.toScala
+			TypeSet(primary, Option(p.secondaryType).map { _.toScala }.filterNot { _ == primary })
+		}
+		
 		def apply(stat: Stat) = stat match {
 			case Hp => p.hp
 			case Attack => p.attack

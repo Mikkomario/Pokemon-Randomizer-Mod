@@ -7,6 +7,7 @@ import utopia.flow.collection.immutable.{Graph, Pair}
 import utopia.flow.util.NotEmpty
 import vf.poke.core.model.enumeration.PokeType._
 import vf.model.TypeRelation.{Relative, StrongRelative, Unrelated, WeakRelative}
+import vf.poke.core.model.cached.TypeSet
 import vf.poke.core.model.enumeration.PokeType
 import vf.util.RandomUtils._
 import vf.util.PokeExtensions._

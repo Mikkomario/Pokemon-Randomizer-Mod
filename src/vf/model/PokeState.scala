@@ -3,6 +3,7 @@ package vf.model
 import com.dabomstew.pkrandom.pokemon.{MegaEvolution, Pokemon}
 import com.dabomstew.pkrandom.romhandlers.RomHandler
 import utopia.flow.collection.immutable.Pair
+import vf.poke.core.model.cached.TypeSet
 import vf.poke.core.model.enumeration.Stat
 import vf.util.PokeExtensions._
 
@@ -11,7 +12,7 @@ import scala.jdk.CollectionConverters._
 object PokeState
 {
 	def from(poke: Pokemon)(implicit rom: RomHandler) = apply(
-		types = TypeSet.from(poke),
+		types = poke.types,
 		abilities = Vector(poke.ability1 -> false, poke.ability2 -> false, poke.ability3 -> true)
 			.filterNot { _._1 == 0 }.distinct,
 		stats = Stat.values.map { s => s -> poke(s) }.toMap,

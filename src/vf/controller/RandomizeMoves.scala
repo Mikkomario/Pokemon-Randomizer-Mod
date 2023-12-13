@@ -11,7 +11,7 @@ import utopia.flow.collection.immutable.range.{HasInclusiveOrderedEnds, NumericS
 import utopia.flow.operator.enumeration.End.{First, Last}
 import vf.model.TypeRelation.{Relative, StrongRelative, Unrelated, WeakRelative}
 import vf.model._
-import vf.poke.core.model.cached.{Spread, SpreadThresholds, SpreadValues}
+import vf.poke.core.model.cached.{Spread, SpreadThresholds, SpreadValues, TypeSet}
 import vf.poke.core.model.enumeration.PokeType
 import vf.poke.core.model.enumeration.Stat.{Attack, SpecialAttack}
 import vf.util.RandomUtils._
@@ -48,7 +48,7 @@ object RandomizeMoves
 	// private val attackModifierDifferenceThreshold = 0.2
 	// This value is applied in reduction. E.g. at least 100% - X% power
 	// Power increase is stronger (e.g. -50% converts to +100%)
-	private val swapMaxPowerDifference = 0.35
+	private val swapMaxPowerDifference = 0.3
 	private val maxStartingMovePower = 50
 	
 	private val addedTypeMoveChance = 0.75
@@ -233,7 +233,7 @@ object RandomizeMoves
 			// Selects from moves with similar strength, if applicable
 			val powerRange = {
 				if (original.power > 0) {
-					val originalPower = original.power * original.hitratio * original.hitCount
+					val originalPower = powerOf(original)
 					val diffMod = 1 - swapMaxPowerDifference
 					Some(Span.numeric(originalPower * diffMod, originalPower / diffMod))
 				}
@@ -316,16 +316,7 @@ object RandomizeMoves
 		val (newNonDamagingMoves, newDamagingMoves) = newMoveLevels.map(newMove).divideBy { _.power > 0 }.toTuple
 		// Orders these new moves by power
 		// Non-power moves are placed randomly
-		val newMovesBuffer = mutable.Buffer.from(newDamagingMoves.sortBy { m =>
-			val base = m.power * m.hitCount * m.hitratio
-			val countingRecharge = if (m.isRechargeMove) base * 0.5 else base
-			val countingStatChange = if (m.hasBeneficialStatChange) countingRecharge * 1.15 else countingRecharge
-			m.criticalChance match {
-				case CriticalChance.GUARANTEED => countingStatChange * 1.6
-				case CriticalChance.INCREASED => countingStatChange * 1.1
-				case _ => countingStatChange
-			}
-		})
+		val newMovesBuffer = mutable.Buffer.from(newDamagingMoves.sortBy(powerOf))
 		newNonDamagingMoves.foreach { move =>
 			if (newMovesBuffer.isEmpty)
 				newMovesBuffer.append(move)
@@ -416,7 +407,7 @@ object RandomizeMoves
 		val finalOptions = {
 			// Filters by power range, if applicable
 			val inPowerRange = powerRange match {
-				case Some(range) => filteredOptions.filter { m => range.contains(m.power * m.hitCount * m.hitratio) }
+				case Some(range) => filteredOptions.filter { m => range.contains(powerOf(m)) }
 				case None => filteredOptions
 			}
 			inPowerRange.map { _.number } -- pickedMovesBuilder
@@ -533,5 +524,22 @@ object RandomizeMoves
 				appearanceMap.view.mapValues { _ / averageAppearanceCount }.toMap
 			}
 		}.toMap
+	}
+	
+	private def powerOf(move: Move) = {
+		val base = {
+			// Special moves like heat crash and fissure are counted as 60 power 100% hit moves
+			if (move.power < 5)
+				60 * 100
+			else
+				move.power * move.hitCount * move.hitratio
+		}
+		val countingRecharge = if (move.isRechargeMove) base * 0.5 else base
+		val countingStatChange = if (move.hasBeneficialStatChange) countingRecharge * 1.15 else countingRecharge
+		move.criticalChance match {
+			case CriticalChance.GUARANTEED => countingStatChange * 1.6
+			case CriticalChance.INCREASED => countingStatChange * 1.1
+			case _ => countingStatChange
+		}
 	}
 }
