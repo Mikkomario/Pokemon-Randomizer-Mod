@@ -1,12 +1,12 @@
 package vf.util
 
 import com.dabomstew.pkrandom.pokemon.{Pokemon, Type}
-import vf.poke.core.model.enumeration.{PokeType, Stat}
-import vf.poke.core.model.enumeration.PokeType._
-import Stat._
 import com.dabomstew.pkrandom.romhandlers.RomHandler
-import vf.model.{EffectivenessRelations, TypeRelations}
+import vf.model.TypeRelations
 import vf.poke.core.model.cached.TypeSet
+import vf.poke.core.model.enumeration.PokeType._
+import vf.poke.core.model.enumeration.Stat._
+import vf.poke.core.model.enumeration.{PokeType, Stat}
 
 import scala.language.implicitConversions
 
@@ -46,7 +46,6 @@ object PokeExtensions
 	}
 	implicit class RichTypeSet(val t: TypeSet) extends AnyVal
 	{
-		def effectiveness = EffectivenessRelations(t)
 		def relations(implicit rom: RomHandler) = TypeRelations.of(t)
 	}
 	

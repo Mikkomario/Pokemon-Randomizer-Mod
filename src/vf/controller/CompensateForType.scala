@@ -2,11 +2,10 @@ package vf.controller
 
 import utopia.flow.collection.CollectionExtensions._
 import utopia.flow.collection.immutable.Pair
-import vf.model.{EffectivenessRelations, EvolveGroup, Poke}
-import vf.poke.core.model.cached.TypeSet
+import vf.model.{EvolveGroup, Poke}
+import vf.poke.core.model.cached.{EffectivenessRelations, TypeSet}
 import vf.poke.core.model.enumeration.Stat
 import vf.poke.core.model.enumeration.Stat._
-import vf.util.PokeExtensions._
 
 import java.io.PrintWriter
 

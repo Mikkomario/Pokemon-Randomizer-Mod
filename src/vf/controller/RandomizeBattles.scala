@@ -38,6 +38,8 @@ object RandomizeBattles
 		StrongRelative -> 9.0, Relative -> 5.0, WeakRelative -> 3.0, Unrelated -> 1.5
 	)
 	
+	private val hiddenAbilityChanceMod = 0.2
+	
 	
 	// OTHER    --------------------------
 	
@@ -154,9 +156,12 @@ object RandomizeBattles
 				originalPoke.originalState.bst}) => ${
 				selectedPoke.name } (${ selectedPoke.types }) lvl $level (${ selectedPoke.bst })")
 			
+			val selectedForm = selectedPoke.randomForm
 			tp.pokemon = selectedPoke.randomForm
+			tp.forme = selectedForm.formeNumber
+			tp.formeSuffix = selectedForm.formeSuffix
 			tp.level = level
-			tp.abilitySlot = selectedPoke.abilitySlots.random
+			tp.abilitySlot = randomAbilitySlotFrom(selectedPoke)
 			tp.resetMoves = true
 			
 			// Enables mega evolution for all pokes that support it
@@ -220,7 +225,7 @@ object RandomizeBattles
 				// WET WET
 				tp.pokemon = poke.randomForm
 				tp.level = additionalPokeLevel
-				tp.abilitySlot = poke.abilitySlots.random
+				tp.abilitySlot = randomAbilitySlotFrom(poke)
 				tp.resetMoves = true
 				// Clear out the held item because we only want one Pokemon with a mega stone if we're
 				// swapping mega evolvables
@@ -385,6 +390,11 @@ object RandomizeBattles
 		}
 	}
 	
+	private def randomAbilitySlotFrom(poke: Poke) = {
+		val slots = poke.abilitySlots
+		val options = if (slots.contains(3) && chance(hiddenAbilityChanceMod)) slots else slots.filterNot { _ == 3 }
+		options.random
+	}
 	
 	/*
 	boolean includeFormes = settings.isAllowTrainerAlternateFormes();

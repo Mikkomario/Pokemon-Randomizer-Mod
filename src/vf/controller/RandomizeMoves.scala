@@ -11,7 +11,7 @@ import utopia.flow.collection.immutable.range.{HasInclusiveOrderedEnds, NumericS
 import utopia.flow.operator.enumeration.End.{First, Last}
 import vf.model.TypeRelation.{Relative, StrongRelative, Unrelated, WeakRelative}
 import vf.model._
-import vf.poke.core.model.cached.{Spread, SpreadThresholds, SpreadValues, TypeSet}
+import vf.poke.core.model.cached.{EffectivenessRelations, Spread, SpreadThresholds, SpreadValues, TypeSet}
 import vf.poke.core.model.enumeration.PokeType
 import vf.poke.core.model.enumeration.Stat.{Attack, SpecialAttack}
 import vf.util.RandomUtils._
@@ -35,7 +35,7 @@ object RandomizeMoves
 	
 	// 0 = no extra moves, 1 = 100% extra moves, 2 = 200% extra moves, and so on...
 	private val extraMoveRatio = 1
-	private val minMovesCount = 12
+	private val minMovesCount = 16
 	private val additionalMovesPerFavouriteLevel = 4
 	
 	private val swapMoveChance = 0.4
