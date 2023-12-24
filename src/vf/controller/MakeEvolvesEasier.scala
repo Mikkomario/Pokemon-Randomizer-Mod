@@ -72,7 +72,10 @@ object MakeEvolvesEasier
 				// Assigns a mega stone as a held item, if appropriate
 				NotEmpty(group.megas.filter { _.canMegaEvolveInTrainerBattle }).foreach { megas =>
 					val mega = megas.flatMap { _.fromMegaEvos.headOption }.toVector.random
-					group.forms.foreach { _.giveItem(mega.argument) }
+					group.forms.foreach { p =>
+						writer.println(s"Gives ${ mega.to.fullName } stone to ${ p.name }")
+						p.giveItem(mega.argument)
+					}
 				}
 				// Modifies the evos, also
 				group.iterator.foreach { apply(_, writer) }

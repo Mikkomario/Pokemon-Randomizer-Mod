@@ -11,12 +11,12 @@ import utopia.flow.collection.immutable.range.{HasInclusiveOrderedEnds, NumericS
 import utopia.flow.operator.enumeration.End.{First, Last}
 import vf.model.TypeRelation.{Relative, StrongRelative, Unrelated, WeakRelative}
 import vf.model._
-import vf.poke.core.model.cached.{EffectivenessRelations, Spread, SpreadThresholds, SpreadValues, TypeSet}
+import vf.poke.core.model.cached._
 import vf.poke.core.model.enumeration.PokeType
 import vf.poke.core.model.enumeration.Stat.{Attack, SpecialAttack}
-import vf.util.RandomUtils._
 import vf.util.PokeExtensions._
 import vf.util.RandomUtils
+import vf.util.RandomUtils._
 
 import java.io.PrintWriter
 import java.util
@@ -64,7 +64,7 @@ object RandomizeMoves
 	// An favourite level -based increase sometimes applied to defensive and offensive weight modifiers
 	private val buffWeightIncreasePerFavouriteLevel = 0.1
 	
-	private val levelSpreadWeightMods = SpreadValues(0.25, 1.0, 1.5, 0.5)
+	private val levelSpreadWeightMods = SpreadValues2(0.25, 1.0, 1.5, 1.25, 0.5)
 	private val appearanceRateImpactMod = 0.5
 	private val appearanceRateWeightModRange = NumericSpan(0.2, 3.0)
 	private val rareMoveAppearanceRateThreshold = 0.2
@@ -136,7 +136,7 @@ object RandomizeMoves
 	}
 	
 	// Returns new moves to assign (level -> move number)
-	private def apply(poke: Poke, firstLevel: Int, favouriteLevel: Int, levelWeightMods: Map[Int, Spread[Int, Double]],
+	private def apply(poke: Poke, firstLevel: Int, favouriteLevel: Int, levelWeightMods: Map[Int, Spread2[Int, Double]],
 	                  moveAppearanceRates: Map[PokeType, Pair[Map[Int, Double]]], writer: PrintWriter)
 	                 (implicit moves: Moves, settings: Settings, rom: RomHandler): Vector[MoveLearn] =
 	{
@@ -165,6 +165,11 @@ object RandomizeMoves
 			}
 			// Won't add a weight modifier to own types
 			.toMap -- poke.types.types
+		
+		// Calculates the rate of status moves in the original poke. This is used as a reference value.
+		val originalStatusRatio = poke.moves
+			.count { m => moves.byNumber.get(m.move).exists { _.category == MoveCategory.STATUS } }.toDouble /
+			poke.moves.size
 		
 		writer.println(s"\nProcessing ${poke.name} (${poke.types} / ${
 			if (poke(Attack) > poke(SpecialAttack)) "Physical" else "Special" } (${(poke.attackSpAttackRatio * 100).toInt}% physical))\t----------------")
@@ -199,7 +204,7 @@ object RandomizeMoves
 					else
 						currentRelations.random(typeWeights, additionalTypeWeights)
 				}
-			val category = randomCategoryIn(moveType, poke.attackSpAttackRatio)
+			val category = randomCategoryIn(moveType, poke.attackSpAttackRatio, originalStatusRatio)
 			val powerRange = if (targetLevel <= 1) Some(NumericSpan(0.0, maxStartingMovePower)) else None
 			val move = randomMove(targetLevel, moveType, category, powerRange, poke.types, levelWeightMods,
 				moveAppearanceRateCache, pickedMovesBuilder)
@@ -228,7 +233,7 @@ object RandomizeMoves
 					original.category
 				// Case: Move acquires random category
 				else
-					randomCategoryIn(moveType, poke.attackSpAttackRatio)
+					randomCategoryIn(moveType, poke.attackSpAttackRatio, originalStatusRatio)
 			}
 			// Selects from moves with similar strength, if applicable
 			val powerRange = {
@@ -364,19 +369,24 @@ object RandomizeMoves
 	
 	// Selects from physical vs. special based on stats
 	// May also select status type
-	def randomCategoryIn(moveType: PokeType, physicalToSpecialRatio: Double)(implicit moves: Moves) = {
-		if (RandomSource.nextDouble() < moves.statusMoveRatioByType(moveType))
+	def randomCategoryIn(moveType: PokeType, physicalToSpecialRatio: Double, originalStatusRatio: Double)
+	                    (implicit moves: Moves) =
+	{
+		// Checks for a status move (based on original poke and the selected move type)
+		if (RandomSource.nextDouble() < (moves.statusMoveRatioByType(moveType) max originalStatusRatio))
 			MoveCategory.STATUS
-		else if (RandomSource.nextDouble() < physicalToSpecialRatio)
-			MoveCategory.PHYSICAL
+		// Selects between physical and special move
 		else
-			MoveCategory.SPECIAL
+			RandomUtils.weighedRandom(Vector(
+				MoveCategory.PHYSICAL -> physicalToSpecialRatio,
+				MoveCategory.SPECIAL -> (1.0 / physicalToSpecialRatio)
+			))
 	}
 	
 	// Randomly selects the move from available options
 	private def randomMove(targetLevel: Int, moveType: PokeType, category: MoveCategory,
 	                       powerRange: Option[HasInclusiveOrderedEnds[Double]] = None, pokeTypes: TypeSet,
-	                       levelSpreadMods: Map[Int, Spread[Int, Double]], appearanceRateCache: Cache[Move, Double],
+	                       levelSpreadMods: Map[Int, Spread2[Int, Double]], appearanceRateCache: Cache[Move, Double],
 	                       pickedMovesBuilder: mutable.Set[Int])
 	                      (implicit moves: Moves): Move =
 		_randomMove(targetLevel, Some(moveType), Some(category), powerRange, pokeTypes, levelSpreadMods,
@@ -385,7 +395,7 @@ object RandomizeMoves
 	@tailrec
 	private def _randomMove(targetLevel: Int, moveType: Option[PokeType], category: Option[MoveCategory],
 	                       powerRange: Option[HasInclusiveOrderedEnds[Double]], pokeTypes: TypeSet,
-	                       levelSpreadMods: Map[Int, Spread[Int, Double]], appearanceRateCache: Cache[Move, Double],
+	                       levelSpreadMods: Map[Int, Spread2[Int, Double]], appearanceRateCache: Cache[Move, Double],
 	                       pickedMovesBuilder: mutable.Set[Int])
 	                      (implicit moves: Moves): Move =
 	{
@@ -478,7 +488,7 @@ object RandomizeMoves
 		}
 		moveLevelsMap.view.mapValues { levelsBuilder =>
 			// Forms level spread models based on this data
-			SpreadThresholds.from(levelsBuilder.result().sorted)
+			SpreadThresholds2.from(levelsBuilder.result().sorted, 4)
 		}.toMap
 	}
 	

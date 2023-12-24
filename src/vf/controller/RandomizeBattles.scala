@@ -105,6 +105,12 @@ object RandomizeBattles
 		val selectedGroups = mutable.Set[EvolveGroup]()
 		// Can only apply one mega evo per trainer
 		val megaEvoFlag = Flag()
+		/*
+	Pokemon oldPK = tp.pokemon;
+                if (tp.forme > 0) {
+                    oldPK = getAltFormeOfPokemon(oldPK, tp.forme);
+                }
+	 */
 		// Each entry contains: 1) Original evolve group, 2) Selected evolve group, 3) Selected poke and 4) Encounter level
 		val selectedOpponents = Vector.from(Random.shuffle(trainer.pokemon.asScala).map { tp =>
 			val originalNumber = tp.pokemon.number
@@ -149,17 +155,34 @@ object RandomizeBattles
 			selectedGroups += selectedGroup
 			
 			// Assigns the selected poke
-			// TODO: Apply random form (?)
 			
 			// Logs
 			writer.println(s"\t- ${ originalPoke.name } (${ originalPoke.originalState.types }) lvl ${ tp.level } (${
 				originalPoke.originalState.bst}) => ${
 				selectedPoke.name } (${ selectedPoke.types }) lvl $level (${ selectedPoke.bst })")
 			
+			// Selects the correct form information
+			// Selects the form randomly
 			val selectedForm = selectedPoke.randomForm
-			tp.pokemon = selectedPoke.randomForm
-			tp.forme = selectedForm.formeNumber
-			tp.formeSuffix = selectedForm.formeSuffix
+			// Case: Alt-form
+			if (selectedForm.formeNumber > 0) {
+				tp.forme = selectedForm.formeNumber
+				tp.formeSuffix = selectedForm.formeSuffix
+				tp.pokemon = selectedForm.baseForme
+				
+				if (selectedForm.cosmeticForms > 0)
+					tp.forme += selectedForm.getCosmeticFormNumber(RandomSource.nextInt(selectedForm.cosmeticForms))
+			}
+			// Case: Base-form
+			else {
+				tp.pokemon = selectedForm
+				tp.formeSuffix = ""
+				tp.forme = 0
+				
+				if (selectedForm.cosmeticForms > 0) {
+					tp.forme = selectedForm.getCosmeticFormNumber(RandomSource.nextInt(selectedForm.cosmeticForms))
+				}
+			}
 			tp.level = level
 			tp.abilitySlot = randomAbilitySlotFrom(selectedPoke)
 			tp.resetMoves = true
