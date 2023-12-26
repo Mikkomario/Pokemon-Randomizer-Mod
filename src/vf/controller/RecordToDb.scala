@@ -16,6 +16,7 @@ import vf.poke.core.model.enumeration.MoveCategory.{Physical, Special}
 import vf.poke.core.model.partial.game.{AbilityData, GameData, ItemData}
 import vf.poke.core.model.partial.poke._
 import vf.poke.core.model.partial.randomization._
+import vf.poke.core.util.Common
 import vf.util.PokeExtensions._
 
 object RecordToDb
@@ -26,6 +27,7 @@ object RecordToDb
 	 * @return An interface for the unmodified game instance
 	 */
 	def original(implicit connection: Connection, rom: RomHandler) = {
+		Common.setupDb()
 		// Inserts the game to the database, if appropriate
 		val game = this.game
 		val gameId = game.either.id
@@ -37,8 +39,10 @@ object RecordToDb
 		new RecordToDb(gameId, randomizationId)
 	}
 	
-	private def game(implicit connection: Connection, rom: RomHandler) =
+	private def game(implicit connection: Connection, rom: RomHandler) = {
+		Common.setupDb()
 		DbGame.withName(rom.getROMName).pull.toRight { GameModel.insert(GameData(rom.getROMName)) }
+	}
 	
 	/**
 	 * Inserts a new randomization instance and returns an interface for it
@@ -47,6 +51,7 @@ object RecordToDb
 	 * @return New randomization recording interface
 	 */
 	def newRandomization()(implicit connection: Connection, rom: RomHandler) = {
+		Common.setupDb()
 		val gameId = game.either.id
 		new RecordToDb(gameId, RandomizationModel.insert(RandomizationData(gameId)).id)
 	}
