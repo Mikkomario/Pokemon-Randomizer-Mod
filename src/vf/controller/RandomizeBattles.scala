@@ -8,6 +8,7 @@ import utopia.flow.collection.immutable.range.Span
 import utopia.flow.operator.Identity
 import utopia.flow.util.NotEmpty
 import utopia.flow.view.mutable.eventful.Flag
+import vf.model.TrainerType.{Boss, Important, Regular}
 import vf.model.TypeRelation.{Relative, StrongRelative, Unrelated, WeakRelative}
 import vf.model._
 import vf.util.RandomUtils._
@@ -27,9 +28,11 @@ object RandomizeBattles
 {
 	// ATTRIBUTES   ----------------------
 	
-	private val bstRange = Span.numeric(0.85, 1.25)
+	private val bstRange = Span.numeric(0.85, 1.35)
+	private val trainerTypeBstMods = Map[TrainerType, Double](Regular -> 1.0, Important -> 1.1, Boss -> 1.2)
+		.withDefaultValue(1.0)
 	
-	private val defaultMinTypeRelation: TypeRelation = WeakRelative
+	private val defaultMinTypeRelation: TypeRelation = Relative
 	private val minStrictTypeRelation: TypeRelation = StrongRelative
 	
 	private val bstDiffWeightMod = 0.5
@@ -37,6 +40,9 @@ object RandomizeBattles
 	private val typeWeights = Map[TypeRelation, Double](
 		StrongRelative -> 9.0, Relative -> 5.0, WeakRelative -> 3.0, Unrelated -> 1.5
 	)
+	
+	// Level increases applied to individual random pokes
+	private val individualLevelIncreaseMods = Vector(1.2, 1.1)
 	
 	private val hiddenAbilityChanceMod = 0.2
 	
@@ -94,6 +100,17 @@ object RandomizeBattles
 			group.startsWith("GYM") || group.startsWith("ELITE") || group.startsWith("CHAMPION") ||
 				group.startsWith("THEMED") || group.startsWith("GIO")
 		}
+		
+		val trainerType = {
+			if (trainer.isBoss)
+				Boss
+			else if (trainer.isImportant)
+				Important
+			else
+				Regular
+		}
+		val bstMod = trainerTypeBstMods(trainerType)
+		
 		// Finds a match for each of the trainer's original pokes using the following rules:
 		//      - Looks for similar strength (bst) level (compared to the original)
 		//      - Looks for similar type (relative to the original poke type)
@@ -112,10 +129,11 @@ object RandomizeBattles
                 }
 	 */
 		// Each entry contains: 1) Original evolve group, 2) Selected evolve group, 3) Selected poke and 4) Encounter level
-		val selectedOpponents = Vector.from(Random.shuffle(trainer.pokemon.asScala).map { tp =>
+		val selectedOpponents = Vector.from(Random.shuffle(trainer.pokemon.asScala).zipWithIndex.map { case (tp, index) =>
 			val originalNumber = tp.pokemon.number
 			val originalGroup = groups(originalNumber)
-			val level = math.round(tp.level * levelMod).toInt
+			// Applies common level scaling + individual level scalings
+			val level = math.round(tp.level * levelMod * individualLevelIncreaseMods.lift(index).getOrElse(1.0)).toInt
 			val originalPoke = originalGroup.formAtLevel(tp.level)
 			val originalTypeRelations = originalPoke.types.relations
 			val (selectedGroup, selectedPoke) = starterMapping.get(originalGroup) match {
@@ -149,7 +167,7 @@ object RandomizeBattles
 					}
 					// Case: No mapping result available => Selects randomly from the pool
 					else
-						findMatchFor(originalGroup, level, pokePool, selectedGroups,
+						findMatchFor(originalGroup, level, bstMod, pokePool, selectedGroups,
 							minAppearanceLevels, writer, useStrictTyping, requireMegaEvolvable)
 			}
 			selectedGroups += selectedGroup
@@ -203,12 +221,10 @@ object RandomizeBattles
 			// Returns original group, selected group, selected poke and applied level
 			(originalGroup, selectedGroup, selectedPoke, level)
 		})
-		
 		// Adds additional trainer pokemon, if applicable (settings-based)
-		val defaultAdditionalPokeCount = {
-			if (trainer.isBoss)
-				settings.getAdditionalBossTrainerPokemon
-			else if (trainer.isImportant) {
+		val defaultAdditionalPokeCount = trainerType match {
+			case Boss => settings.getAdditionalBossTrainerPokemon
+			case Important =>
 				// Exception: The early rivals don't get additional pokes, because that's just unfair
 				if (selectedOpponents.exists { _._4 < 10 })
 					0
@@ -216,9 +232,7 @@ object RandomizeBattles
 					settings.getAdditionalImportantTrainerPokemon min 1
 				else
 					settings.getAdditionalImportantTrainerPokemon
-			}
-			else
-				settings.getAdditionalRegularTrainerPokemon
+			case Regular => settings.getAdditionalRegularTrainerPokemon
 		}
 		// If a trainer can appear in a Multi Battle (i.e., a Double Battle where the enemy consists
 		// of two independent trainers), we want to be aware of that so we don't give them a team of
@@ -231,7 +245,7 @@ object RandomizeBattles
 		if (additionalPokeCount > 0) {
 			val (originalTrainerPokeGroups, trainerPokeLevels) = selectedOpponents
 				.splitMap { case (originalGroup, _, _, level) => (originalGroup, level) }
-			val (additionalPokes, additionalPokeLevel) = selectAdditionalPokes(additionalPokeCount,
+			val (additionalPokes, additionalPokeLevel) = selectAdditionalPokes(bstMod, additionalPokeCount,
 				originalTrainerPokeGroups, trainerPokesWithLevels.map { _._1 }, trainerPokeLevels, pokePool,
 				selectedGroups, minAppearanceLevels)
 			
@@ -263,9 +277,9 @@ object RandomizeBattles
 			trainerPokesWithLevels
 	}
 	
-	private def findMatchFor(originalGroup: EvolveGroup, level: Int, pool: Iterable[EvolveGroup],
-	                         used: mutable.Set[EvolveGroup], minAppearanceLevels: Map[EvolveGroup, Int],
-	                         writer: PrintWriter,
+	private def findMatchFor(originalGroup: EvolveGroup, level: Int, bstMod: Double,
+	                         pool: Iterable[EvolveGroup], used: mutable.Set[EvolveGroup],
+	                         minAppearanceLevels: Map[EvolveGroup, Int], writer: PrintWriter,
 	                         useStrictTyping: Boolean, requireMegaEvolvable: Boolean)
 	                        (implicit rom: RomHandler) =
 	{
@@ -277,8 +291,9 @@ object RandomizeBattles
 		//      2) Non-duplicate filter
 		//      3) BST filter
 		//      4) Mega filter
+		lazy val appliedBstRange = bstRange.mapEnds { _ * bstMod }
 		lazy val originalBst = original.originalState.bst
-		lazy val allowedBst = bstRange.mapEnds { _ * originalBst }
+		lazy val allowedBst = appliedBstRange.mapEnds { _ * originalBst }
 		lazy val originalType = original.originalState.types
 		lazy val typeRelations = TypeRelations.of(originalType)
 		lazy val minTypeRelation = if (useStrictTyping) minStrictTypeRelation else defaultMinTypeRelation
@@ -355,7 +370,7 @@ object RandomizeBattles
 	
 	// WET WET - Needs refactoring with findMatch
 	// Assumes additionalPokeCount > 0
-	private def selectAdditionalPokes(additionalPokeCount: Int, originalGroups: Iterable[EvolveGroup],
+	private def selectAdditionalPokes(bstMod: Double, additionalPokeCount: Int, originalGroups: Iterable[EvolveGroup],
 	                                  newPokes: Iterable[Poke],
 	                                  levels: Iterable[Int], pool: Iterable[EvolveGroup], used: mutable.Set[EvolveGroup],
 	                                  minAppearanceLevels: Map[EvolveGroup, Int]) =
@@ -376,7 +391,7 @@ object RandomizeBattles
 		//      2) Non-duplicate filter
 		//      3) BST filter
 		//      4) Type filter, if applicable
-		lazy val allowedBst = bstRange.mapEnds { _ * referenceBst }
+		lazy val allowedBst = bstRange.mapEnds { _ * referenceBst * bstMod }
 		val options = pool.flatMap { group =>
 			// 1, 2
 			if (minAppearanceLevels.get(group).forall { l => l <= level || l <= 5 } && !used.contains(group)) {
