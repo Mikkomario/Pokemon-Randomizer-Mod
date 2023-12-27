@@ -70,10 +70,10 @@ object MakeEvolvesEasier
 		Log("evos") { writer =>
 			evoGroups.foreach { group =>
 				// Assigns a mega stone as a held item, if appropriate
-				NotEmpty(group.megas.filter { _.canMegaEvolveInTrainerBattle }).foreach { megas =>
+				NotEmpty(group.megas.filter { _.fromMegaEvos.exists { _.method == 1 } }).foreach { megas =>
 					val mega = megas.flatMap { _.fromMegaEvos.headOption }.toVector.random
 					group.forms.foreach { p =>
-						writer.println(s"Gives ${ mega.to.fullName } stone to ${ p.name }")
+						writer.println(s"\nGives ${ mega.to.fullName } stone to ${ p.name }")
 						p.giveItem(mega.argument)
 					}
 				}

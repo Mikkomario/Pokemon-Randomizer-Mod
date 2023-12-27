@@ -27,6 +27,7 @@ object RecordToDb
 	 * @return An interface for the unmodified game instance
 	 */
 	def original(implicit connection: Connection, rom: RomHandler) = {
+		println()
 		Common.setupDb()
 		// Inserts the game to the database, if appropriate
 		val game = this.game

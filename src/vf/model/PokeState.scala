@@ -32,8 +32,8 @@ object PokeState
  * @param evos Evolutions of this poke. First the 'from' evos (i.e. from previous forms)
  *             and second the 'to' evos (i.e. next forms)
  */
-case class PokeState(types: TypeSet, abilities: Vector[(Int, Boolean)], stats: Map[Stat, Int], evos: Pair[Vector[EvoState]],
-                     megaEvos: Pair[Vector[MegaEvolution]], moves: Vector[MoveLearn])
+case class PokeState(types: TypeSet, abilities: Vector[(Int, Boolean)], stats: Map[Stat, Int],
+                     evos: Pair[Vector[EvoState]], megaEvos: Pair[Vector[MegaEvolution]], moves: Vector[MoveLearn])
 	extends PokeLike[EvoState]
 {
 	// OTHER    -----------------------
